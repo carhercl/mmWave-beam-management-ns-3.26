@@ -3,7 +3,7 @@
 This is an [ns-3](https://www.nsnam.org "ns-3 Website") mmWave module for the simulation
 of 5G mmWave cellular networks. A description of this module can be found on [arXiv](https://arxiv.org/abs/1705.02882 "mmwave paper").
 
-The new-handover branch offers integration between LTE and mmWave and dual connectivity features.
+This fork of the mmWave module for ns-3 permits the customization of your own beam management strategy and the use of fixed codebooks.
 
 ## Documentation and examples ##
 
@@ -16,12 +16,9 @@ For a complete description and examples, refer to:
 
 ## Authors ##
 
+ - Carlos Herranz <carhercl@iteam.upv.es>
  - Marco Mezzavilla <mezzavilla@nyu.edu>
  - Menglei Zhang <menglei@nyu.edu>
- - Michele Polese <michele.polese@gmail.com>
- - Sourjya Dutta <sdutta@nyu.edu>
- - Russell Ford <russell.ford@nyu.edu>
- - Marco Giordani <m.giordani91@gmail.com>
 
 ## License ##
 
