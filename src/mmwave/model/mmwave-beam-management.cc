@@ -576,18 +576,18 @@ MmWaveBeamManagement::SetCandidateBeamPairSet (Ptr<NetDevice> device, std::vecto
 	}
 
 	//TODO: Consider creating a new method with the following.
-	// Now schedule CSI-RS transmissions for tracking
-	for (std::map <Ptr<NetDevice>,BeamTrackingParams>::iterator it = m_candidateBeamsMap.begin();
-			it != m_candidateBeamsMap.end(); ++it)
-	{
-		Ptr<NetDevice> pDevice = it->first;
-		std::vector<BeamPairInfoStruct> listOfBeamPairs = it->second.m_beamPairList;
-		for (std::vector<BeamPairInfoStruct>::iterator itV = listOfBeamPairs.begin();
-				itV != listOfBeamPairs.end(); itV++)
-		{
-			//TODO: Call here. params: std::vector<BeamPairInfoStruct>,
-		}
-	}
+//	// Now schedule CSI-RS transmissions for tracking
+//	for (std::map <Ptr<NetDevice>,BeamTrackingParams>::iterator it = m_candidateBeamsMap.begin();
+//			it != m_candidateBeamsMap.end(); ++it)
+//	{
+//		Ptr<NetDevice> pDevice = it->first;
+//		std::vector<BeamPairInfoStruct> listOfBeamPairs = it->second.m_beamPairList;
+//		for (std::vector<BeamPairInfoStruct>::iterator itV = listOfBeamPairs.begin();
+//				itV != listOfBeamPairs.end(); itV++)
+//		{
+//			//TODO: Call here. params: std::vector<BeamPairInfoStruct>,
+//		}
+//	}
 
 }
 

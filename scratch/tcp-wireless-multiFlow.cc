@@ -525,9 +525,7 @@ main (int argc, char *argv[])
 	// Install LTE Devices to the nodes
 
 	  NetDeviceContainer mmWaveEnbDevs = mmwaveHelper->InstallEnbDevice (mmWaveEnbNodes);
-	  NetDeviceContainer mcUeDevs;
-
-	    mcUeDevs = mmwaveHelper->InstallUeDevice (ueNodes);
+	  NetDeviceContainer mcUeDevs = mmwaveHelper->InstallUeDevice (ueNodes);
 
 	// Install the IP stack on the UEs
 	// Assign IP address to UEs, and install applications

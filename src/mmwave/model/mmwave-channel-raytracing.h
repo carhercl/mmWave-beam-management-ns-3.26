@@ -38,7 +38,7 @@
 #include <ns3/net-device-container.h>
 #include <ns3/random-variable-stream.h>
 #include "mmwave-phy-mac-common.h"
-
+#include "ns3/mmwave-beam-management.h"
 
 
 
@@ -81,12 +81,30 @@ public:
 	static TypeId GetTypeId (void);
 	void DoDispose ();
 	void LoadTraces();
+	void LoadTracesMod ();
 	void ConnectDevices (Ptr<NetDevice> dev1, Ptr<NetDevice> dev2);
 	void Initial(NetDeviceContainer ueDevices, NetDeviceContainer enbDevices);
+	void InitialModified(NetDeviceContainer ueDevices, NetDeviceContainer enbDevices);	//Modified to support beam management
 
 	void SetConfigurationParameters (Ptr<MmWavePhyMacCommon> ptrConfig);
 	Ptr<MmWavePhyMacCommon> GetConfigurationParameters (void) const;
 
+	SpectrumValue GetSinrForBeamPairs (
+			Ptr<NetDevice> ueDevice,
+			Ptr<NetDevice> enbDevice,
+			complexVector_t txBeamforming,
+			complexVector_t rxBeamforming);
+
+	SpectrumValue CalSnr (
+			Ptr<SpectrumValue>  txPsd,
+			Ptr<NetDevice> enbNetDevice,
+			Ptr<NetDevice> ueNetDevice,
+			complexVector_t txBeamforming,
+			complexVector_t rxBeamforming);
+
+	void UpdateBfChannelMatrix(Ptr<NetDevice> ueDevice, Ptr<NetDevice> enbDevice, BeamPairInfoStruct bestBeams);
+
+	void SetBeamSweepingVector (Ptr<NetDevice> ueDevice, Ptr<NetDevice> enbDevice);
 
 private:
 

@@ -654,7 +654,8 @@ MmWaveHelper::InitiateChannel (NetDeviceContainer ueDevices, NetDeviceContainer 
 	}
 	else if(m_channelModelType == "ns3::MmWaveChannelRaytracing")
 	{
-		m_raytracing->Initial(ueDevices,enbDevices);
+//		m_raytracing->Initial(ueDevices,enbDevices);	//Old version not supporting beam management
+		m_raytracing->InitialModified(ueDevices,enbDevices);	//Enabling beam management
 	}
 	else if(m_channelModelType == "ns3::MmWave3gppChannel")
 	{

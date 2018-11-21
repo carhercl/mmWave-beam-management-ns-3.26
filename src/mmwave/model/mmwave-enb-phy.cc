@@ -180,10 +180,10 @@ MmWaveEnbPhy::DoInitialize (void)
 	double beamPeriodicity = m_phyMacConfig->GetSlotPeriod();
 	Time beamPeriodicityTime = NanoSeconds(1000*beamPeriodicity);
 //	Ptr<MmWaveBeamManagement> mng = CreateObject<MmWaveBeamManagement>();
-	m_beamManagement = CreateObject<MmWaveBeamManagement>();
-	m_beamManagement->InitializeBeamSweepingTx(beamPeriodicityTime);
-	MmWavePhyMacCommon::SsBurstPeriods ssBurstSetperiod = m_phyMacConfig->GetSsBurstSetPeriod();
-	m_beamManagement->ScheduleSsSlotSetStart(ssBurstSetperiod);
+//	m_beamManagement = CreateObject<MmWaveBeamManagement>();
+//	m_beamManagement->InitializeBeamSweepingTx(beamPeriodicityTime);
+//	MmWavePhyMacCommon::SsBurstPeriods ssBurstSetperiod = m_phyMacConfig->GetSsBurstSetPeriod();
+//	m_beamManagement->ScheduleSsSlotSetStart(ssBurstSetperiod);
 	// End of Carlos modification
 
 	MmWavePhy::DoInitialize ();

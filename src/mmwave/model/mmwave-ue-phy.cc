@@ -725,7 +725,7 @@ MmWaveUePhy::StartSsBlockSlot()
 			GetBeamGain();
 
 			// Call to update beam sweeping beam id if it is time to do so
-			if (m_beamManagement->GetNumBlocksSinceLastBeamSweepUpdate() == m_phyMacConfig->GetSsBlockPatternLength()-1) // FIXME: TX codebook length is 64
+			if (m_beamManagement->GetNumBlocksSinceLastBeamSweepUpdate() == m_phyMacConfig->GetSsBlockPatternLength()-1)
 			{
 //				m_beamManagement->BeamSweepStepRx();
 				Simulator::Schedule(Period-NanoSeconds(1), &MmWaveBeamManagement::BeamSweepStepRx,m_beamManagement);
@@ -1259,6 +1259,7 @@ MmWaveUePhy::GetBeamGain()
 		Ptr<SpectrumPropagationLossModel> pModel = pMmodel->GetSpectrumPropagationLossModel();//pChannel->GetObject<SpectrumPropagationLossModel>();
 		Ptr<MmWaveBeamforming> bf = DynamicCast<MmWaveBeamforming>(pModel);
 		Ptr<MmWave3gppChannel> p3gpp = DynamicCast<MmWave3gppChannel>(pModel);
+		Ptr<MmWaveChannelRaytracing> pRaytracing = DynamicCast<MmWaveChannelRaytracing>(pModel);
 		if (bf)
 		{
 			bf->SetBeamSweepingVector(m_netDevice,node);
@@ -1266,6 +1267,10 @@ MmWaveUePhy::GetBeamGain()
 		else if (p3gpp)
 		{
 			p3gpp->SetBeamSweepingVector(m_netDevice,node);
+		}
+		else if (pRaytracing)
+		{
+			pRaytracing->SetBeamSweepingVector(m_netDevice,node);
 		}
 		else
 		{
@@ -1286,6 +1291,10 @@ void MmWaveUePhy::UpdateChannelMap ()
 
 	BeamPairInfoStruct bestBeams = m_beamManagement->GetBestScannedBeamPair();
 	Ptr<NetDevice> enbNetDevice = bestBeams.m_targetNetDevice;
+	if (bestBeams.m_targetNetDevice == NULL)
+	{
+		std::cout << "bestBeams.m_targetNetDevice is null and it should not be!" << std::endl;
+	}
 	Ptr<NetDevice> ueNetDevice = m_netDevice;
 
 	Ptr<MmWaveEnbNetDevice> pMmEnbNetDevice = DynamicCast<MmWaveEnbNetDevice>(enbNetDevice);
@@ -1296,6 +1305,7 @@ void MmWaveUePhy::UpdateChannelMap ()
 	Ptr<SpectrumPropagationLossModel> pModel = pMmodel->GetSpectrumPropagationLossModel();//pChannel->GetObject<SpectrumPropagationLossModel>();
 	Ptr<MmWaveBeamforming> bf = DynamicCast<MmWaveBeamforming>(pModel);
 	Ptr<MmWave3gppChannel> p3gpp = DynamicCast<MmWave3gppChannel>(pModel);
+	Ptr<MmWaveChannelRaytracing> pRaytracing = DynamicCast<MmWaveChannelRaytracing>(pModel);
 	if(bf)
 	{
 		bf->UpdateBfChannelMatrix(ueNetDevice, enbNetDevice, bestBeams);
@@ -1303,6 +1313,10 @@ void MmWaveUePhy::UpdateChannelMap ()
 	else if (p3gpp)
 	{
 		p3gpp->UpdateBfChannelMatrix(ueNetDevice, enbNetDevice, bestBeams);
+	}
+	else if (pRaytracing)
+	{
+		pRaytracing->UpdateBfChannelMatrix(ueNetDevice, enbNetDevice, bestBeams);
 	}
 	else
 	{
@@ -1392,6 +1406,7 @@ MmWaveUePhy::GetBeamGainForCsi()
 		Ptr<SpectrumPropagationLossModel> pModel = pMmodel->GetSpectrumPropagationLossModel();//pChannel->GetObject<SpectrumPropagationLossModel>();
 		Ptr<MmWaveBeamforming> bf = DynamicCast<MmWaveBeamforming>(pModel);
 		Ptr<MmWave3gppChannel> p3gpp = DynamicCast<MmWave3gppChannel>(pModel);
+		Ptr<MmWaveChannelRaytracing> pRaytracing = DynamicCast<MmWaveChannelRaytracing>(pModel);
 
 		SpectrumValue sinr;
 //		double currentAvgSinr = -1;
@@ -1411,6 +1426,10 @@ MmWaveUePhy::GetBeamGainForCsi()
 			else if (p3gpp)
 			{
 				sinr = p3gpp->GetSinrForBeamPairs(m_netDevice,enb,beamformingTx,beamformingRx);
+			}
+			else if (pRaytracing)
+			{
+				sinr = pRaytracing->GetSinrForBeamPairs(m_netDevice,enb,beamformingTx,beamformingRx);
 			}
 			else
 			{
@@ -1484,7 +1503,7 @@ MmWaveUePhy::AcquaringPeriodicCsiValuesRoutine ()
 		// Get the beam gains
 		GetBeamGainForCsi();
 
-		BeamTrackingParams candidateBeamsInfoAfter = m_beamManagement->GetBeamsToTrackForEnb(enb);
+		BeamTrackingParams candidateBeamsInfoUpdated = m_beamManagement->GetBeamsToTrackForEnb(enb);
 
 		// Find best pair of beams and update channel matrix if they changed. Analog introduces some delay
 		BeamPairInfoStruct bestBeams = m_beamManagement->GetBestScannedBeamPair();
@@ -1494,12 +1513,12 @@ MmWaveUePhy::AcquaringPeriodicCsiValuesRoutine ()
 		Time analogDelayTime = MicroSeconds(2*m_beamManagement->GetBeamReportingPeriod());
 //		std::cout << "CSI update: Time = " << Simulator::Now().GetSeconds() << std::endl;
 //		NS_LOG_INFO("CSI update: Time = " << Simulator::Now().GetSeconds());
-		for (unsigned pos = 0; pos < candidateBeamsInfoAfter.m_beamPairList.size(); pos++)
+		for (unsigned pos = 0; pos < candidateBeamsInfoUpdated.m_beamPairList.size(); pos++)
 		{
-			if(candidateBeamsInfoAfter.m_beamPairList.at(pos).m_avgSinr > sinr)
+			if(candidateBeamsInfoUpdated.m_beamPairList.at(pos).m_avgSinr > sinr)
 			{
-				bestCandidatePair = candidateBeamsInfoAfter.m_beamPairList.at(pos);
-				sinr = candidateBeamsInfoAfter.m_beamPairList.at(pos).m_avgSinr;
+				bestCandidatePair = candidateBeamsInfoUpdated.m_beamPairList.at(pos);
+				sinr = candidateBeamsInfoUpdated.m_beamPairList.at(pos).m_avgSinr;
 			}
 		}
 		if(bestBeams.m_txBeamId != bestCandidatePair.m_txBeamId || bestBeams.m_rxBeamId != bestCandidatePair.m_rxBeamId)
