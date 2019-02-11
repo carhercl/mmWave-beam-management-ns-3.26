@@ -80,6 +80,8 @@ public:
 
 	static TypeId GetTypeId (void);
 	void DoDispose ();
+	void SetTraceFilePath (std::string file_path);
+	void SetTraceIndex (uint16_t index);
 	void LoadTraces();
 	void LoadTracesMod ();
 	void ConnectDevices (Ptr<NetDevice> dev1, Ptr<NetDevice> dev2);
@@ -114,6 +116,8 @@ private:
 
 	complex2DVector_t GenSpatialMatrix (uint64_t traceIndex, uint8_t* antennaNum, bool bs) const;
 	complexVector_t GenSinglePath (double hAngle, double vAngle, uint8_t* antennaNum) const;
+	complexVector_t GenSinglePathKron (double hAngle, double vAngle, uint8_t* antennaNum) const;
+	complexVector_t KroneckerProductVector(complexVector_t a_h, complexVector_t a_v) const;
 	complexVector_t CalcBeamformingVector (complex2DVector_t SpatialMatrix, doubleVector_t powerFraction) const;
 	Ptr<SpectrumValue> GetChannelGain (Ptr<const SpectrumValue> txPsd, Ptr<mmWaveBeamFormingTraces> bfParams, double speed) const;
 	double GetSystemBandwidth () const;
@@ -125,6 +129,8 @@ private:
 	Ptr<MmWavePhyMacCommon> m_phyMacConfig;
 	uint16_t m_startDistance;
 	double m_speed;
+	std::string m_traceFileName;
+	uint16_t m_traceIndex;
 };
 
 

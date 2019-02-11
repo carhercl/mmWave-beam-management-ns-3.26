@@ -32,7 +32,7 @@ namespace ns3
 
 typedef std::vector< std::complex<double> > complexVector_t;
 typedef std::vector<complexVector_t> complex2DVector_t;
-typedef std::pair<uint16_t, uint16_t > sinrKey;
+typedef std::pair<uint16_t, uint16_t > sinrKey;		// <txBeamId,rxBeamId>
 
 class MmWaveEnbPhy;
 class MmWaveUePhy;
@@ -111,11 +111,20 @@ public:
 	 */
 	void FindBeamPairCandidatesVicinity();
 
+	/*
+	 * @brief Alt3: Alt2 and additional RX beams uniformly separated with alpha beams w.r.t best RX beam in the azimuth plane.
+	 */
+	void FindBeamPairCandidatesVicinityWithAlpha(uint16_t alpha);
+
 	uint16_t GetMaxNumBeamPairCandidates();
 
 	void SetMaxNumBeamPairCandidates(uint16_t nBeamPairs);
 
-	BeamPairInfoStruct FindBestScannedBeamPair ();
+	void FindBeamPairCandidates();
+
+	BeamPairInfoStruct FindBestScannedBeamPairAndCreateBeamTrackingList ();
+
+	BeamPairInfoStruct ExhaustiveBestScannedBeamPairSearch ();
 
 	/*
 	 * @brief Workaround to indicate the list of beam pairs for tracking to peer (from UE to gNB normally but could work the other way around).
@@ -128,6 +137,8 @@ public:
 	BeamPairInfoStruct GetBestScannedBeamPair ();
 
 	void UpdateBestScannedEnb();
+
+	void ClearAllSinrMapEntries ();
 
 	void ScheduleSsSlotSetStart(MmWavePhyMacCommon::SsBurstPeriods period);
 
@@ -169,6 +180,16 @@ public:
 		m_beamReportingEnabled = true;
 	}
 
+	inline void SetTxCodebookFilePath(std::string path)
+	{
+		m_txFilePath = path;
+	}
+
+	inline void SetRxCodebookFilePath(std::string path)
+	{
+		m_rxFilePath = path;
+	}
+
 	std::map <Ptr<NetDevice>,BeamTrackingParams> GetDevicesMapToExpireTimer (Time margin);
 
 	void IncreaseBeamReportingTimers (std::map <Ptr<NetDevice>,BeamTrackingParams> devicesToUpdate);
@@ -183,6 +204,14 @@ public:
 
 	void SetBestScannedEnb(BeamPairInfoStruct bestEnbBeamInfo);
 
+	void SetCandidateBeamAlternative(uint16_t alt, uint16_t alpha);
+	void SetCandidateBeamAlternative(uint16_t alt, uint16_t alpha, bool memory);
+
+	void EnableSsbMeasMemory ();
+
+	void DisableSsbMeasMemory ();
+
+	void ConfigureBeamReporting ();
 
 private:
 
@@ -195,6 +224,8 @@ private:
 	*/
 	complex2DVector_t LoadCodebookFile (std::string inputFilename);
 
+	std::string m_txFilePath;
+	std::string m_rxFilePath;
 
 	BeamSweepingParams m_beamSweepParams;
 
@@ -208,8 +239,10 @@ private:
 	uint16_t m_beamReportingPeriod;			// Beam reporting period in ms: Matches Xp parameter in PhyMacCommon class
 	//std::vector<BeamPairInfoStruct> m_candidateBeams;
 	std::map <Ptr<NetDevice>,BeamTrackingParams> m_candidateBeamsMap;
+	uint16_t m_beamCandidateListStrategy;	// Selects the strategy to create the list of candidate beams
+	uint16_t m_alpha;	// Alpha parameter in strategy to create the list of candidate beams number 3
 	bool m_beamReportingEnabled;	// Determines if beam reporting is enabled at this time
-
+	bool m_memorySs;	// Flag to determine if SS tracking decisions are to be made with the whole historical or only within the current SSB window
 
 	std::map <Ptr<NetDevice>,std::map <sinrKey,SpectrumValue>> m_enbSinrMap;	//Map to all the eNBs
 //	std::map <Ptr<NetDevice>,std::map <sinrKey,float>> m_ueSinrMap;	//Map to all the UEs

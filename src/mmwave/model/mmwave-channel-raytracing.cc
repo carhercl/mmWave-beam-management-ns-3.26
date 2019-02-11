@@ -20,6 +20,8 @@
  *        	 Sourjya Dutta <sdutta@nyu.edu>
  *        	 Russell Ford <russell.ford@nyu.edu>
  *        	 Menglei Zhang <menglei@nyu.edu>
+ *
+ *   Modified by: Carlos Herranz <carhercl@iteam.upv.es>
  */
 
 
@@ -63,7 +65,11 @@ MmWaveChannelRaytracing::MmWaveChannelRaytracing ()
 	:m_antennaSeparation(0.5)
 {
 	m_uniformRv = CreateObject<UniformRandomVariable> ();
-	LoadTraces();
+
+	/*
+	 * Select one method to load traces. LoadTracesMod plugs Unity traces in.
+	 */
+//	LoadTraces();
 //	LoadTracesMod();
 
 }
@@ -83,6 +89,11 @@ MmWaveChannelRaytracing::GetTypeId (void)
 			   DoubleValue (1.0),
 			   MakeDoubleAccessor (&MmWaveChannelRaytracing::m_speed),
 			   MakeDoubleChecker<double> ())
+    .AddAttribute("TraceFileName",
+    			"The name of the trace file",
+				StringValue(""),
+				MakeStringAccessor(&MmWaveChannelRaytracing::SetTraceFilePath),
+				MakeStringChecker ())
 	;
 	return tid;
 }
@@ -108,6 +119,18 @@ Ptr<MmWavePhyMacCommon>
 MmWaveChannelRaytracing::GetConfigurationParameters (void) const
 {
 	return m_phyMacConfig;
+}
+
+void
+MmWaveChannelRaytracing::SetTraceFilePath (std::string file_path)
+{
+	m_traceFileName = file_path;
+}
+
+void
+MmWaveChannelRaytracing::SetTraceIndex (uint16_t index)
+{
+	m_traceIndex = index;
 }
 
 void
@@ -193,7 +216,12 @@ MmWaveChannelRaytracing::LoadTracesMod()
 {
 	//std::string filename = "src/mmwave/model/Raytracing/Quadriga.txt";
 //	std::string filename = "src/mmwave/model/Raytracing/traces.txt";
-	std::string filename = "src/mmwave/model/Raytracing/tracesUnity2_delay.txt";
+	std::string filename = m_traceFileName;
+	if (filename.empty())
+	{
+		std::cout << "Trace file (" << filename << ") not provided" << std::endl;
+		filename = "src/mmwave/model/Raytracing/NS3_corner1.txt";
+	}
 	NS_LOG_FUNCTION (this << "Loading Raytracing file " << filename);
 	std::ifstream singlefile;
 	singlefile.open (filename.c_str (), std::ifstream::in);
@@ -421,25 +449,32 @@ MmWaveChannelRaytracing::CalSnr (
 	key_t key = std::make_pair(txDevice,rxDevice);
 
 	double time = Simulator::Now().GetSeconds();
+
+	/* This updates the trace.txt entry in use */
+	/*
 	uint16_t traceIndex = (m_startDistance+time*m_speed)*100;
 	static uint16_t currentIndex = m_startDistance*100;
 	if(traceIndex > 26050)
 	{
 		NS_FATAL_ERROR ("The maximum trace index is 26050");
 	}
-	/*uint16_t traceIndex = (m_startDistance+time*m_speed)*6;
+	*/
+	/*
+	uint16_t traceIndex = (m_startDistance+time*m_speed)*6;
 	static uint16_t currentIndex = m_startDistance;
 	if(traceIndex > g_path.size())
 	{
 		NS_FATAL_ERROR ("The maximum trace index is reached");
-	}*/
-//	// Unity traces: Measurement granularity is 1 m
-//	uint16_t traceIndex = (m_startDistance+time*m_speed);
-//	static uint16_t currentIndex = m_startDistance;
-//	if(traceIndex > g_numPdps)
-//	{
-//		NS_FATAL_ERROR ("The maximum trace index is " << g_numPdps);
-//	}
+	}
+	*/
+
+	/* Unity traces: measurement resolution is 1 m */
+	uint16_t traceIndex = (m_startDistance+time*m_speed);
+	static uint16_t currentIndex = m_startDistance;
+	if(traceIndex > g_numPdps)
+	{
+		NS_FATAL_ERROR ("The maximum trace index is " << g_numPdps);
+	}
 
 	if(traceIndex != currentIndex)
 	{
@@ -550,7 +585,7 @@ MmWaveChannelRaytracing::CalSnr (
 	//NS_LOG_UNCOND ("Gain("<<10*Log10((*bfPsd))<<"dB)");
 
 
-	double noiseFigure = 5.0;
+	double noiseFigure = 10.0;
 	Ptr<SpectrumValue> noisePsd =
 				MmWaveSpectrumValueHelper::CreateNoisePowerSpectralDensity (m_phyMacConfig, noiseFigure);
 
@@ -637,12 +672,16 @@ MmWaveChannelRaytracing::DoCalcRxPowerSpectralDensity (Ptr<const SpectrumValue> 
 	key_t key = std::make_pair(txDevice,rxDevice);
 
 	double time = Simulator::Now().GetSeconds();
+
+	/* This updates the trace.txt entry in use */
+	/*
 	uint16_t traceIndex = (m_startDistance+time*m_speed)*100;
 	static uint16_t currentIndex = m_startDistance*100;
 	if(traceIndex > 26050)
 	{
 		NS_FATAL_ERROR ("The maximum trace index is 26050");
 	}
+	*/
 	/*
 	uint16_t traceIndex = (m_startDistance+time*m_speed)*6;
 	static uint16_t currentIndex = m_startDistance;
@@ -651,13 +690,15 @@ MmWaveChannelRaytracing::DoCalcRxPowerSpectralDensity (Ptr<const SpectrumValue> 
 		NS_FATAL_ERROR ("The maximum trace index is reached");
 	}
 	*/
-//	//Unity traces: measurement resolution is 1 m
-//	uint16_t traceIndex = (m_startDistance+time*m_speed);
-//	static uint16_t currentIndex = m_startDistance;
-//	if(traceIndex > g_numPdps)
-//	{
-//		NS_FATAL_ERROR ("The maximum trace index is " << g_numPdps);
-//	}
+
+	/* Unity traces: measurement resolution is 1 m */
+//	uint16_t update_factor = 10;
+	uint16_t traceIndex = (m_startDistance+time*m_speed);
+	static uint16_t currentIndex = m_startDistance;
+	if(traceIndex > g_numPdps)
+	{
+		NS_FATAL_ERROR ("The maximum trace index is " << g_numPdps);
+	}
 
 	if(traceIndex != currentIndex)
 	{
@@ -669,7 +710,6 @@ MmWaveChannelRaytracing::DoCalcRxPowerSpectralDensity (Ptr<const SpectrumValue> 
 	std::map< key_t, Ptr<TraceParams> >::iterator it = m_channelMatrixMap.find (key);
 	if (it == m_channelMatrixMap.end ())
 	{
-
 		complex2DVector_t txSpatialMatrix;
 		complex2DVector_t rxSpatialMatrix;
 		if(dl)
@@ -703,7 +743,7 @@ MmWaveChannelRaytracing::DoCalcRxPowerSpectralDensity (Ptr<const SpectrumValue> 
 		Ptr<TraceParams> reverseChannel = Create<TraceParams> ();
 		reverseChannel->m_txSpatialMatrix = rxSpatialMatrix;
 		reverseChannel->m_rxSpatialMatrix = txSpatialMatrix;
-		reverseChannel->m_powerFraction = g_pathloss.at (traceIndex);;
+		reverseChannel->m_powerFraction = g_pathloss.at (traceIndex);
 		reverseChannel->m_delaySpread = g_delay.at (traceIndex);
 		reverseChannel->m_doppler = dopplerShift;
 
@@ -869,7 +909,7 @@ MmWaveChannelRaytracing::GenSpatialMatrix (uint64_t traceIndex, uint8_t* antenna
 			verticalAngle = g_aoaElevation.at (traceIndex).at (pathIndex);
 		}
 		complexVector_t singlePath;
-		singlePath = GenSinglePath (azimuthAngle*M_PI/180, verticalAngle*M_PI/180, antennaNum);
+		singlePath = GenSinglePathKron (azimuthAngle*M_PI/180, verticalAngle*M_PI/180, antennaNum);
 		spatialMatrix.push_back(singlePath);
 	}
 
@@ -895,6 +935,70 @@ MmWaveChannelRaytracing::GenSinglePath (double hAngle, double vAngle, uint8_t* a
 		}
 	}
 	return singlePath;
+}
+
+complexVector_t
+MmWaveChannelRaytracing::GenSinglePathKron (double hAngle, double vAngle, uint8_t* antennaNum) const
+{
+	NS_LOG_FUNCTION (this);
+	complexVector_t singlePath, steeringVector_h, steeringVector_v;
+	uint16_t hSize = antennaNum[0];
+	uint16_t vSize = antennaNum[1];
+	// reserving space for std::vector might speed up vector memory allocation and allocate the necessary space
+	steeringVector_h.reserve(hSize);
+	steeringVector_v.reserve(vSize);
+
+	// The steering vector of the horizontal plane antenna elements
+	steeringVector_h.push_back(std::complex<double> (1.0f, 0.0f));
+	for (int hIndex = 1; hIndex < hSize; hIndex++)
+	{
+		//double complex_phase = 2*M_PI*m_antennaSeparation*sin(-hAngle)*cos(vAngle);
+		double complex_phase = 2*M_PI*m_antennaSeparation*hIndex*sin(-hAngle)*cos(vAngle);
+		steeringVector_h.push_back(std::complex<double> (cos(complex_phase), sin(complex_phase)));
+	}
+
+	// The steering vector of the vertical plane antenna elements
+	steeringVector_v.push_back(std::complex<double> (1.0f, 0.0f));
+	for (int vIndex = 1; vIndex < vSize; vIndex++)
+	{
+		//double complex_phase = 2*M_PI*m_antennaSeparation*sin(-hAngle)*sin(vAngle);
+		double complex_phase = 2*M_PI*m_antennaSeparation*vIndex*sin(-hAngle)*sin(vAngle);
+		steeringVector_v.push_back(std::complex<double> (cos(complex_phase), sin(complex_phase)));
+	}
+
+	// The steering vector of the rectangular array is the kronecker product of the previous two steering vectors
+	// Note that the kronecker product of two vectors is another vector length equals to the product of the two vectors length
+	singlePath = KroneckerProductVector(steeringVector_h, steeringVector_v);
+	return singlePath;
+}
+
+/*
+ * @brief: Function that returns the Kronecker (direct) product of two complex vectors representing the steering vectors of the horizontal and vertical planes of a rectangular antenna array. Please respect order
+ * @param a_h: Steering vector of the horizontal linear array
+ * @param a_h: Steering vector of the vertical linear array
+ */
+complexVector_t
+MmWaveChannelRaytracing::KroneckerProductVector(complexVector_t a_h, complexVector_t a_v) const
+{
+	unsigned int size_h, size_v, size_kron_vector;
+	complexVector_t kron_vector;
+
+	size_h = a_h.size();
+	size_v = a_v.size();
+	size_kron_vector = size_h*size_v;
+	kron_vector.reserve(size_kron_vector);
+
+	for (unsigned int h = 0; h < a_h.size(); h++)
+	{
+		for (unsigned int v = 0; v < a_v.size(); v++)
+		{
+			std::complex<double> value = a_h.at(h) * a_v.at(v);
+			kron_vector.push_back(value);
+//			std::cout << value << std::endl;
+		}
+	}
+
+	return kron_vector;
 }
 
 Ptr<SpectrumValue>
@@ -938,7 +1042,7 @@ MmWaveChannelRaytracing::GetChannelGain (Ptr<const SpectrumValue> txPsd, Ptr<mmW
 					double temp_Doppler = 2*M_PI*t*f_d*bfParams->m_channelParams->m_doppler.at (pathIndex);
 					doppler = std::complex<double> (cos (temp_Doppler), sin (temp_Doppler));
 				}
-                double pathPowerLinear = std::pow (10.0, (bfParams->m_channelParams->m_powerFraction. at(pathIndex)) / 10.0);
+				double pathPowerLinear = std::pow (10.0, (bfParams->m_channelParams->m_powerFraction. at(pathIndex)) / 10.0);
 
 				std::complex<double> smallScaleFading = sqrt(pathPowerLinear)*doppler*delay;
 				NS_LOG_INFO(doppler<<delay);
@@ -998,6 +1102,7 @@ MmWaveChannelRaytracing::UpdateBfChannelMatrix(Ptr<NetDevice> ueDevice, Ptr<NetD
 	else
 	{
 		NS_ASSERT_MSG (it != m_channelMatrixMap.end (), "could not find");
+		std::cout << "ERROR at " << Simulator::Now() << ": No channelParams in m_channelMap (UpdateBfChannelMatrix)" << std::endl;
 	}
 
 	Ptr<MmWaveEnbNetDevice> pMmwaveEnb = DynamicCast<MmWaveEnbNetDevice>(enbDevice);
@@ -1008,11 +1113,6 @@ MmWaveChannelRaytracing::UpdateBfChannelMatrix(Ptr<NetDevice> ueDevice, Ptr<NetD
 
 	Ptr<MmWaveBeamManagement> pMngEnb = pEnbPhy->GetBeamManagement();
 	Ptr<MmWaveBeamManagement> pMngUe = pUePhy->GetBeamManagement();
-
-	if (!channelParams)
-	{
-		std::cout << "ERROR at " << Simulator::Now() << ": No channelParams in m_channelMap (UpdateBfChannelMatrix)" << std::endl;
-	}
 
 	Ptr<mmWaveBeamFormingTraces> bfParams = Create<mmWaveBeamFormingTraces> ();
 	bfParams->m_txW = pMngEnb->GetBeamSweepVector(bestBeams.m_txBeamId);

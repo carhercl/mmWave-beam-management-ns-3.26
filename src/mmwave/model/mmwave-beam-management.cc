@@ -46,6 +46,11 @@ MmWaveBeamManagement::MmWaveBeamManagement()
 	m_ssBlocksLastBeamSweepUpdate = 0;
 	m_maxNumBeamPairCandidates = 20;
 	m_beamReportingEnabled = false;
+	m_txFilePath = "";
+	m_rxFilePath = "";
+	m_memorySs = true;
+	m_beamCandidateListStrategy = 2;
+	m_alpha = 2;
 }
 
 
@@ -74,6 +79,10 @@ MmWaveBeamManagement::InitializeBeamManagerEnb (Ptr<MmWavePhyMacCommon> phyMacCo
 {
 	double beamPeriodicity = phyMacConfig->GetSlotPeriod();
 	Time beamPeriodicityTime = NanoSeconds(1000*beamPeriodicity);
+	if (m_txFilePath.empty() == true)
+	{
+		SetTxCodebookFilePath(m_txFilePath);
+	}
 	InitializeBeamSweepingTx(beamPeriodicityTime);
 	MmWavePhyMacCommon::SsBurstPeriods ssBurstSetperiod = phyMacConfig->GetSsBurstSetPeriod();
 	ScheduleSsSlotSetStart(ssBurstSetperiod);
@@ -93,6 +102,10 @@ MmWaveBeamManagement::InitializeBeamManagerUe(Ptr<MmWavePhyMacCommon> phyMacConf
 {
 	double beamPeriodicity = phyMacConfig->GetSlotPeriod();
 	Time beamPeriodicityTime = NanoSeconds(1000*beamPeriodicity);
+	if (m_rxFilePath.empty() == true)
+	{
+		SetRxCodebookFilePath(m_rxFilePath);
+	}
 	InitializeBeamSweepingRx(beamPeriodicityTime);
 	MmWavePhyMacCommon::SsBurstPeriods ssBurstSetperiod = phyMacConfig->GetSsBurstSetPeriod();
 	ScheduleSsSlotSetStart(ssBurstSetperiod);
@@ -114,9 +127,14 @@ MmWaveBeamManagement::InitializeBeamSweepingTx(Time beamChangeTime)
 
 //	std::string txFilePath = "src/mmwave/model/BeamFormingMatrix/TxCodebook.txt";
 	std::string txFilePath = "src/mmwave/model/BeamFormingMatrix/KronCodebook16h4v.txt";
-//	std::string txFilePath = "../../InputFiles/KronCodebook16h4v.txt";
+//	std::string txFilePath = "../../../InputFiles/KronCodebook16h4v.txt";
 
-	m_beamSweepParams.m_codebook = LoadCodebookFile(txFilePath);
+	if (m_txFilePath == "")
+	{
+		m_txFilePath = txFilePath;
+	}
+	m_beamSweepParams.m_codebook = LoadCodebookFile(m_txFilePath);
+
 	this->SetBeamChangeInterval(beamChangeTime);
 	m_lastBeamSweepUpdate = Simulator::Now();
 	NS_LOG_INFO ("InitializeBeamSweepingTx");
@@ -131,9 +149,14 @@ MmWaveBeamManagement::InitializeBeamSweepingRx(Time beamChangeTime)
 
 //	std::string rxFilePath = "src/mmwave/model/BeamFormingMatrix/RxCodebook.txt";
 	std::string rxFilePath = "src/mmwave/model/BeamFormingMatrix/KronCodebook8h2v.txt";
-//	std::string rxFilePath = "../../InputFiles/KronCodebook8h2v.txt";
+//	std::string rxFilePath = "../../../InputFiles/KronCodebook8h2v.txt";
 
-	m_beamSweepParams.m_codebook = LoadCodebookFile(rxFilePath);
+	if (m_rxFilePath == "")
+	{
+		m_rxFilePath = rxFilePath;
+	}
+	m_beamSweepParams.m_codebook = LoadCodebookFile(m_rxFilePath);
+
 	this->SetBeamChangeInterval(beamChangeTime);
 	NS_LOG_INFO ("InitializeBeamSweepingRx");
 	m_lastBeamSweepUpdate = Simulator::Now();
@@ -260,6 +283,9 @@ MmWaveBeamManagement::AddEnbSinr (Ptr<NetDevice> enbNetDevice, uint16_t enbBeamI
 
 }
 
+/*
+ * Alt1. Beam tracking candidate list of beams.
+ */
 void
 MmWaveBeamManagement::FindBeamPairCandidatesSinr ()
 {
@@ -305,7 +331,7 @@ MmWaveBeamManagement::FindBeamPairCandidatesSinr ()
 				candidateBeamPairs.push_back(beamPair);
 				numBeamPairs = 1;
 			}
-			// In case the list of candidate beam pairs it is not empty, add the new node in the right position of the list
+			// In case the list of candidate beam pairs is not empty, add the new node in the right position of the list
 			else
 			{
 				bool iterate = true;
@@ -357,7 +383,9 @@ MmWaveBeamManagement::FindBeamPairCandidatesSinr ()
 	}
 }
 
-
+/*
+ * Alt2.
+ */
 void
 MmWaveBeamManagement::FindBeamPairCandidatesVicinity ()
 {
@@ -369,30 +397,34 @@ MmWaveBeamManagement::FindBeamPairCandidatesVicinity ()
 		std::vector<BeamPairInfoStruct> candidateBeamPairs;
 
 		// Internal SINR value to control the size of the candidate beam vector.
-		double minSinr=0;
+//		double minSinr=0;
 		int nbands = m_enbSinrMap.begin()->second.begin()->second.GetSpectrumModel()->GetNumBands();
 		BeamPairInfoStruct beamPair, beamPairExtra;
-		for (std::map <sinrKey,SpectrumValue>::iterator it2 = it1->second.begin();
-						it2 != it1->second.end();
-						++it2)
-		{
-			nbands = it2->second.GetSpectrumModel ()->GetNumBands ();
-			double avgSinr = Sum (it2->second)/nbands;
 
-			// Skip the current pair of beams if they provide lower SINR than the current candidate pairs
-			if(avgSinr > minSinr)
-			{
-				beamPair.m_avgSinr = avgSinr;
-				beamPair.m_sinrPsd = it2->second;
-				beamPair.m_targetNetDevice = pDevice;
-				beamPair.m_txBeamId = it2->first.first;
-				beamPair.m_rxBeamId = it2->first.second;
-				minSinr = avgSinr;
-			}
-		}
-
+//		// Iterate along all the beam pairs and get the one with the largest SINR
+//		for (std::map <sinrKey,SpectrumValue>::iterator it2 = it1->second.begin();
+//						it2 != it1->second.end();
+//						++it2)
+//		{
+//			//int nbands = it2->second.GetSpectrumModel ()->GetNumBands ();  //FIXME: Do this twice, in and outside the loop?
+//			double avgSinr = Sum (it2->second)/nbands;
+//
+//			// Skip the current pair of beams if they provide lower SINR than the current candidate pairs
+//			if(avgSinr > minSinr)
+//			{
+//				beamPair.m_avgSinr = avgSinr;
+//				beamPair.m_sinrPsd = it2->second;
+//				beamPair.m_targetNetDevice = pDevice;
+//				beamPair.m_txBeamId = it2->first.first;
+//				beamPair.m_rxBeamId = it2->first.second;
+//				minSinr = avgSinr;
+//			}
+//		}
+		beamPair = GetBestScannedBeamPair();
+		// The best beam pair is the first one in the tracking list.
 		candidateBeamPairs.push_back(beamPair);
 
+		// Now construct the rest of the beam pairs in the immediate vicinity
 		// TODO: Hard-coded for tx 16x4 and rx 8x2 arrays. Make it compatible with any geometry
 		uint16_t txBeamId = beamPair.m_txBeamId;
 		uint16_t rxBeamId = beamPair.m_rxBeamId;
@@ -469,10 +501,12 @@ MmWaveBeamManagement::FindBeamPairCandidatesVicinity ()
 					beamPairExtra.m_avgSinr = Sum(itExtra->second)/nbands;
 					beamPairExtra.m_sinrPsd = itExtra->second;
 				}
-//				else
-//				{
-//					std::cout << "No SINR value. Just populating beam ids." << std::endl;
-//				}
+				else
+				{
+					//No SINR value in the map. Just populating beam ids
+					beamPairExtra.m_avgSinr = -1;
+					beamPairExtra.m_sinrPsd = 0;
+				}
 				candidateBeamPairs.push_back(beamPairExtra);
 			}
 
@@ -484,16 +518,91 @@ MmWaveBeamManagement::FindBeamPairCandidatesVicinity ()
 		beamTrackingStruct.m_beamPairList = candidateBeamPairs;
 		beamTrackingStruct.m_numBeamPairs = candidateBeamPairs.size();
 		beamTrackingStruct.csiReportPeriod = static_cast<MmWavePhyMacCommon::CsiReportingPeriod>(m_beamReportingPeriod);
-		std::map <Ptr<NetDevice>,BeamTrackingParams>::iterator itMap = m_candidateBeamsMap.find(pDevice);
-		if(itMap == m_candidateBeamsMap.end())
-		{
-			m_candidateBeamsMap.insert(std::pair<Ptr<NetDevice>,BeamTrackingParams>(pDevice,beamTrackingStruct));
-		}
-		else
-		{
-			itMap->second = beamTrackingStruct;
-		}
+//		std::map <Ptr<NetDevice>,BeamTrackingParams>::iterator itMap = m_candidateBeamsMap.find(pDevice);
+//		if(itMap == m_candidateBeamsMap.end())
+//		{
+//			m_candidateBeamsMap.insert(std::pair<Ptr<NetDevice>,BeamTrackingParams>(pDevice,beamTrackingStruct));
+//		}
+//		else
+//		{
+//			itMap->second = beamTrackingStruct;
+//		}
+		UpdateBeamTrackingInfo(pDevice,beamTrackingStruct);
 	}
+}
+
+
+/*
+ * Alt3
+ */
+void
+MmWaveBeamManagement::FindBeamPairCandidatesVicinityWithAlpha(uint16_t alpha)
+{
+	// Get list of beams from Alt2 strategy
+	FindBeamPairCandidatesVicinity();
+
+	if (alpha < 1 || alpha > 8)	//Invalid values
+		return;
+
+	int nbands = m_enbSinrMap.begin()->second.begin()->second.GetSpectrumModel()->GetNumBands();
+
+	// For each gNB, complete the list with the alpha separated rx beams
+	for (std::map< Ptr<NetDevice>, std::map <sinrKey,SpectrumValue>>::iterator it1 = m_enbSinrMap.begin();
+				it1 != m_enbSinrMap.end();
+				++it1)
+	{
+		Ptr<NetDevice> pDevice = it1->first;
+		std::map <Ptr<NetDevice>,BeamTrackingParams>::iterator itMap = m_candidateBeamsMap.find(pDevice);
+		BeamTrackingParams originalBeamTrackingStruct = itMap->second;
+		BeamTrackingParams modBeamTrackingStruct = originalBeamTrackingStruct;
+		BeamPairInfoStruct bestBeamPair = originalBeamTrackingStruct.m_beamPairList.at(0);	// Copy the structure to have the beam ids and pointer to eNB
+		BeamPairInfoStruct additionalBeamPair = bestBeamPair;
+		uint16_t txBeam = bestBeamPair.m_txBeamId;
+		uint16_t el = additionalBeamPair.m_rxBeamId / 8;
+		uint16_t az = additionalBeamPair.m_rxBeamId % 8;
+		uint16_t rxBeam = alpha;	// step in terms of beam index
+		uint8_t numTrackingBeams = itMap->second.m_numBeamPairs;
+		while (rxBeam < 8)
+		{
+
+			additionalBeamPair.m_rxBeamId = (az + rxBeam)%8 + el*8;	//FIXME: What if rxBeamId > 8?
+
+			std::map <sinrKey,SpectrumValue>::iterator itExtra =
+											it1->second.find(std::make_pair(txBeam,rxBeam));
+
+			// If SINR info is already available in the map, add the additiona pair of beams to track in the SINR-ordered candidate beams vector
+			if(itExtra != it1->second.end())
+			{
+				additionalBeamPair.m_avgSinr = Sum(itExtra->second)/nbands;
+				additionalBeamPair.m_sinrPsd = itExtra->second;
+				// list of beam pairs to track is ordered in descending avg SINR value.
+				// Iterate along the modified list and place the new entry in the right position
+//				double aux_sinr = 0;
+				std::vector<BeamPairInfoStruct>::iterator orderedIt = modBeamTrackingStruct.m_beamPairList.begin();
+				uint16_t insert_index = 0;
+				while (orderedIt != modBeamTrackingStruct.m_beamPairList.end() && orderedIt->m_avgSinr >= additionalBeamPair.m_avgSinr)
+				{
+					++orderedIt;	// Point to next iteration
+					insert_index++;
+				}
+				modBeamTrackingStruct.m_beamPairList.insert(orderedIt,additionalBeamPair);
+			}
+			// No SINR info, just place the new pair of beams to track at the end of the vector.
+			else
+			{
+				additionalBeamPair.m_avgSinr = -1;
+				additionalBeamPair.m_sinrPsd = 0;
+				modBeamTrackingStruct.m_beamPairList.push_back(additionalBeamPair);
+			}
+
+			numTrackingBeams++;
+			rxBeam = rxBeam + alpha;
+		}
+		modBeamTrackingStruct.m_numBeamPairs = numTrackingBeams;
+
+		UpdateBeamTrackingInfo(pDevice,modBeamTrackingStruct);
+	}
+
 }
 
 uint16_t
@@ -507,29 +616,75 @@ void MmWaveBeamManagement::SetMaxNumBeamPairCandidates(uint16_t nBeamPairs)
 	m_maxNumBeamPairCandidates = nBeamPairs;
 }
 
+/*
+ * This function creates the list of candidate beams to monitor
+ */
+void
+MmWaveBeamManagement::FindBeamPairCandidates()
+{
+
+	switch (m_beamCandidateListStrategy)
+	{
+	case 1:
+		FindBeamPairCandidatesSinr();
+		break;
+	case 2:
+		FindBeamPairCandidatesVicinity();
+		break;
+	case 3:
+		FindBeamPairCandidatesVicinityWithAlpha(m_alpha);
+		break;
+	default:
+		break;
+	}
+}
 
 BeamPairInfoStruct
-MmWaveBeamManagement::FindBestScannedBeamPair ()
+MmWaveBeamManagement::FindBestScannedBeamPairAndCreateBeamTrackingList ()
+{
+	BeamPairInfoStruct bestPairInfo = ExhaustiveBestScannedBeamPairSearch();
+	// First create all beam pair candidates
+	if (GetBeamReportingEnabledCondition() == true)
+	{
+		FindBeamPairCandidates();
+	}
+
+	return bestPairInfo;
+}
+
+
+BeamPairInfoStruct
+MmWaveBeamManagement::ExhaustiveBestScannedBeamPairSearch ()
 {
 	BeamPairInfoStruct bestPairInfo;
-	double bestAvgSinr = -1.0;
-
-	// First create all beam pair candidates
-	//FindBeamPairCandidatesSinr();
-	FindBeamPairCandidatesVicinity();
+	bestPairInfo.m_txBeamId = 0;
+	bestPairInfo.m_rxBeamId = 0;
+	bestPairInfo.m_avgSinr = -1;
+	bestPairInfo.m_sinrPsd = 0;
+	bestPairInfo.m_targetNetDevice = NULL;
 
 	// Now iterate along the map and find the best gNB providing the best beam pairs in terms of SINR
-	for (std::map <Ptr<NetDevice>,BeamTrackingParams>::iterator it = m_candidateBeamsMap.begin();
-			it != m_candidateBeamsMap.end();
-			++it)
+	for (std::map <Ptr<NetDevice>,std::map <sinrKey,SpectrumValue>>::iterator itEnb = m_enbSinrMap.begin();
+			itEnb != m_enbSinrMap.end();
+			++itEnb)
 	{
-		// The candidate beam pairs are ordered in SINR descending order.
-		double currentBeamPairAvgSinr = it->second.m_beamPairList.at(0).m_avgSinr;
-		if (currentBeamPairAvgSinr > bestAvgSinr)
+		Ptr<NetDevice> pDevice = itEnb->first;
+		for(std::map <sinrKey,SpectrumValue>::iterator itSinrMap = itEnb->second.begin();
+				itSinrMap != itEnb->second.end();
+				++itSinrMap)
 		{
-			bestPairInfo = it->second.m_beamPairList.at(0);
-			bestAvgSinr = currentBeamPairAvgSinr;
+			int nbands = itSinrMap->second.GetSpectrumModel ()->GetNumBands ();
+			double avgSinr = Sum (itSinrMap->second)/nbands;
+			if (avgSinr > bestPairInfo.m_avgSinr)
+			{
+				bestPairInfo.m_targetNetDevice = pDevice;
+				bestPairInfo.m_txBeamId = itSinrMap->first.first;
+				bestPairInfo.m_rxBeamId = itSinrMap->first.second;
+				bestPairInfo.m_avgSinr = avgSinr;
+				bestPairInfo.m_sinrPsd = itSinrMap->second;
+			}
 		}
+
 	}
 
 	return bestPairInfo;
@@ -606,7 +761,7 @@ void MmWaveBeamManagement::UpdateBestScannedEnb()
 
 
 	// Get the strongest pair of beams from the best gNB.
-	BeamPairInfoStruct bestScannedBeamPair = FindBestScannedBeamPair();
+	BeamPairInfoStruct bestScannedBeamPair = FindBestScannedBeamPairAndCreateBeamTrackingList();
 	SetBestScannedEnb(bestScannedBeamPair);
 	Time currentTime = Simulator::Now();
 //	NS_LOG_INFO("[" << currentTime.GetSeconds() <<"]Best beam pair update: tx=" << bestScannedBeamPair.m_txBeamId <<
@@ -616,11 +771,29 @@ void MmWaveBeamManagement::UpdateBestScannedEnb()
 				" rx=" << bestScannedBeamPair.m_rxBeamId << " avgSinr=" << bestScannedBeamPair.m_avgSinr <<
 				" (SS)" << std::endl;
 
+	// erase map if memoryless beam tracking strategy.
+	if(m_memorySs == false && m_beamReportingEnabled == true)
+	{
+		//ClearAllSinrMapEntries(); //FIXME: memory issues: access to erased data... Schedule this call
+		Simulator::Schedule(NanoSeconds(10),&MmWaveBeamManagement::ClearAllSinrMapEntries,this);
+	}
 
 }
 
 
-void MmWaveBeamManagement::ScheduleSsSlotSetStart(MmWavePhyMacCommon::SsBurstPeriods period)
+void
+MmWaveBeamManagement::ClearAllSinrMapEntries ()
+{
+	std::map <Ptr<NetDevice>,std::map <sinrKey,SpectrumValue>>::iterator it;
+	for (it = m_enbSinrMap.begin(); it != m_enbSinrMap.end(); ++it)
+	{
+		it->second.clear();
+	}
+}
+
+
+void
+MmWaveBeamManagement::ScheduleSsSlotSetStart(MmWavePhyMacCommon::SsBurstPeriods period)
 {
 	m_ssBlocksLastBeamSweepUpdate = 0;
 	Simulator::Schedule(MicroSeconds(1000*period)-NanoSeconds(1),&MmWaveBeamManagement::ScheduleSsSlotSetStart,this,period);
@@ -792,7 +965,17 @@ MmWaveBeamManagement::GetBeamsToTrackForEnb(Ptr<NetDevice> enb)
 {
 	BeamTrackingParams beamInfo;
 	std::map<Ptr<NetDevice>,BeamTrackingParams>::iterator it = m_candidateBeamsMap.find(enb);
-	beamInfo = it->second;
+	if (it == m_candidateBeamsMap.end())
+	{
+		std::cout << "ERROR in GetBeamsToTrackForEnb(): m_candidateBeamsMap is empty. Maybe you called this too early" << std::endl;
+		beamInfo.m_beamPairList.clear();
+		beamInfo.m_numBeamPairs = 0;
+		beamInfo.m_csiResourceLastAllocation = Seconds(0);
+	}
+	else
+	{
+		beamInfo = it->second;
+	}
 	return beamInfo;
 }
 
@@ -856,6 +1039,73 @@ MmWaveBeamManagement::UpdateBeamTrackingInfoValues (Ptr<NetDevice> peer, BeamTra
 	}
 }
 
+void
+MmWaveBeamManagement::SetCandidateBeamAlternative(uint16_t alt, uint16_t alpha)
+{
+	m_beamCandidateListStrategy = alt;
+	if (alt == 3 && (alpha < 0 || alpha > 7))
+	{
+		std::cout << "Wrong alpha parameter. Using Alt.2 instead of Alt.3" << std::endl;
+		m_alpha = 0;
+		m_beamCandidateListStrategy = 2;
+	}
+	m_alpha = alpha;
+	if (m_beamReportingEnabled && m_beamReportingPeriod > 0 && alt > 1)
+	{
+		m_memorySs = false;
+	}
+}
+
+
+void
+MmWaveBeamManagement::SetCandidateBeamAlternative(uint16_t alt, uint16_t alpha, bool memory)
+{
+	m_beamCandidateListStrategy = alt;
+	m_alpha = alpha;
+	m_memorySs = memory;
+	if (alt < 1 || alt > 3)
+	{
+		std::cout << "Unrecognized beam tracking list strategy option " << alt << ". Please check." << std::endl;
+		m_beamCandidateListStrategy = 2;
+	}
+	// Check Alt 1 configuration
+	else if (alt == 1)
+	{
+		m_memorySs = true;
+	}
+	// Check Alt 3 configuration
+	else if (alt == 3 && (alpha < 0 || alpha > 7))
+	{
+		std::cout << "Wrong alpha parameter. Using Alt.2 instead of Alt.3" << std::endl;
+		m_alpha = 0;
+		m_beamCandidateListStrategy = 2;
+	}
+
+}
+
+void
+MmWaveBeamManagement::ConfigureBeamReporting ()
+{
+	EnableBeamReporting();	//Enable beam reporting
+
+//	The use of memory is now configurable with a simulation parameter.
+//	if (m_beamCandidateListStrategy > 1)
+//	{
+//		DisableSsbMeasMemory();
+//	}
+}
+
+void
+MmWaveBeamManagement::EnableSsbMeasMemory ()
+{
+	m_memorySs = true;
+}
+
+void
+MmWaveBeamManagement::DisableSsbMeasMemory ()
+{
+	m_memorySs = false;
+}
 
 }
 

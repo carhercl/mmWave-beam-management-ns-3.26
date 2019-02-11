@@ -123,6 +123,11 @@ public:
 
 	void SetEnbPhyArchitecture (Architecture arch);
 	void SetUePhyArchitecture (Architecture arch);
+
+	void SetCodebooksPaths (std::string gnbPath, std::string uePath);
+//	void SetEnbCodebookPath (std::string path);
+//	void SetUeCodebookPath (std::string path);
+
 	void SetSsBurstPeriod (MmWavePhyMacCommon::SsBurstPeriods period);
 	void SetSsBurstSetPeriod (MmWavePhyMacCommon::SsBurstPeriods period);
 
@@ -133,6 +138,13 @@ public:
 	MmWavePhyMacCommon::CsiReportingPeriod GetCsiResourceAllocationPeriod ();
 
 	void SetPeriodicCsiReportingConditionFlag (bool state);
+
+	void SetRaytracingFilePath(std::string file_path);
+	void SetStartingTraceIndex (uint16_t index);
+
+	void SetTxPower(double powerDb);
+
+	void SetCandidateListForTrackingStrategy(uint16_t alt, uint16_t alpha, bool memory);
 
 	// End of modification
 
@@ -177,6 +189,9 @@ private:
 	uint16_t m_noTxAntenna;
 	uint16_t m_noRxAntenna;
 
+	std::string m_txCodebookPath;	//Path to the tx codebook file
+	std::string m_rxCodebookPath;	//Path to the rx codebook file
+
 	Ptr<MmWavePhyRxTrace> m_phyStats;
 
 	Ptr<MmWavePhyMacCommon> m_phyMacCommon;
@@ -195,9 +210,9 @@ private:
 	bool m_rlcAmEnabled;
 	bool m_snrTest;
 
-  Ptr<MmWaveBearerStatsCalculator> m_rlcStats;
-  Ptr<MmWaveBearerStatsCalculator> m_pdcpStats;
-  MmWaveBearerStatsConnector m_radioBearerStatsConnector;
+	Ptr<MmWaveBearerStatsCalculator> m_rlcStats;
+	Ptr<MmWaveBearerStatsCalculator> m_pdcpStats;
+	MmWaveBearerStatsConnector m_radioBearerStatsConnector;
 
   	// Carlos modification
   	NetDeviceContainer m_enbMmwaveNetDevices;	// All the instantiated enbNetDevices
@@ -206,6 +221,15 @@ private:
   	MmWavePhyMacCommon::CsiReportingPeriod m_csiResourcePeriodicity;
   	MmWavePhyMacCommon::CsiReportingPeriod m_beamReportingPeriodicity;
 
+  	// Parameters to configure the list of candidate beams to be used for beam tracking.
+  	uint8_t m_trackingListStrategy;
+  	bool m_memory;	// If all SSB beam measurement combinations must be stored
+  	uint8_t m_alpha;	// Only used in Alt.3 in MmWaveBeamManagement
+
+  	std::string m_raytracingFilePath;	//Path to raytracing file (only for raytracing channel)
+  	uint16_t m_startTraceIndex;			// Starting trace index
+
+  	double m_txPower;	// TX power
 };
 
 }

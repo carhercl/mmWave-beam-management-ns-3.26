@@ -178,6 +178,9 @@ MmWaveHelper::DoInitialize()
 		m_raytracing = CreateObject<MmWaveChannelRaytracing> ();
 		m_channel->AddSpectrumPropagationLossModel (m_raytracing);
 		m_raytracing->SetConfigurationParameters (m_phyMacCommon);
+		m_raytracing->SetTraceFilePath(m_raytracingFilePath);
+		m_raytracing->SetTraceIndex(m_startTraceIndex);
+		m_raytracing->LoadTracesMod();
 	}
 	else if(m_channelModelType == "ns3::MmWave3gppChannel")
 	{
@@ -392,6 +395,7 @@ MmWaveHelper::InstallSingleUeDevice (Ptr<Node> n)
 
 	phy->SetConfigurationParameters (phyMacCommon);
 	mac->SetConfigurationParameters (phyMacCommon);
+	phy->SetTxPower(m_txPower);				// Carlos modification
 
 	phy->SetPhySapUser (mac->GetPhySapUser());
 	mac->SetPhySapProvider (phy->GetPhySapProvider());
@@ -425,8 +429,10 @@ MmWaveHelper::InstallSingleUeDevice (Ptr<Node> n)
 	MmWavePhyMacCommon::CsiReportingPeriod csiPeriod = m_beamReportingPeriodicity;
 	phyMacCommon->SetPeriodicCsiResourcePeriodicity(csiPeriod);
 	manager->SetBeamReportingPeriod(csiPeriod);
+	manager->SetRxCodebookFilePath(m_rxCodebookPath);
 	phy->SetBeamManagement (manager);
 	manager->InitializeBeamManagerUe(phyMacCommon, phy);
+	manager->SetCandidateBeamAlternative(m_trackingListStrategy, m_alpha, m_memory);
 	// End of modification
 
 	device->Initialize();
@@ -469,6 +475,7 @@ MmWaveHelper::InstallSingleEnbDevice (Ptr<Node> n)
 
 	phy->SetConfigurationParameters(phyMacCommon);
 	phy->SetPhyArchitecture(m_enbPhyArch);	// Carlos modification
+	phy->SetTxPower(m_txPower);				// Carlos modification
 
 	ulPhy->SetChannel (m_channel);
 	dlPhy->SetChannel (m_channel);
@@ -592,6 +599,7 @@ MmWaveHelper::InstallSingleEnbDevice (Ptr<Node> n)
 	phyMacCommon->SetPeriodicCsiResourceAllocationCondition(m_csiReportingEnabled);
 	MmWavePhyMacCommon::CsiReportingPeriod csiPeriod = m_beamReportingPeriodicity;
 	manager->SetBeamReportingPeriod(csiPeriod);
+	manager->SetTxCodebookFilePath(m_txCodebookPath);
 	phyMacCommon->SetPeriodicCsiResourcePeriodicity(csiPeriod);
 	phy->SetBeamManagement (manager);
 	manager->InitializeBeamManagerEnb(phyMacCommon, phy);
@@ -1063,6 +1071,14 @@ MmWaveHelper::SetUePhyArchitecture (Architecture arch)
 }
 
 
+void
+MmWaveHelper::SetCodebooksPaths (std::string gnbPath, std::string uePath)
+{
+	m_txCodebookPath = gnbPath;
+	m_rxCodebookPath = uePath;
+}
+
+
 void MmWaveHelper::SetSsBurstSetPeriod (MmWavePhyMacCommon::SsBurstPeriods period)
 {
 	m_ssBurstSetPeriod = period;
@@ -1093,6 +1109,32 @@ void
 MmWaveHelper::SetPeriodicCsiReportingConditionFlag (bool state)
 {
 	m_csiReportingEnabled = state;
+}
+
+void
+MmWaveHelper::SetRaytracingFilePath(std::string file_path)
+{
+	m_raytracingFilePath = file_path;
+}
+
+void
+MmWaveHelper::SetStartingTraceIndex (uint16_t index)
+{
+	m_startTraceIndex = index;
+}
+
+void
+MmWaveHelper::SetTxPower(double powerDb)
+{
+	m_txPower = powerDb;
+}
+
+void
+MmWaveHelper::SetCandidateListForTrackingStrategy(uint16_t alt, uint16_t alpha, bool memory)
+{
+	m_trackingListStrategy = alt;
+	m_alpha = alpha;	// Only used in Alt.3 in MmWaveBeamManagement
+	m_memory = memory;
 }
 
 // End of Carlos modification

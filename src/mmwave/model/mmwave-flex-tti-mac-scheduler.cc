@@ -682,7 +682,8 @@ MmWaveFlexTtiMacScheduler::DoSchedTriggerReq (const struct MmWaveMacSchedSapProv
 	if (!uesToAllocate.empty() && m_phyMacConfig->GetPeriodicCsiResourceAllocationCondition() == true)
 	{
 		//FIXME: simplification here. The scheduler should allocate the necessary RBs, not all the RBs in a symbol (time).
-		numSym += uesToAllocate.size() * 20; // Assume five symbol per UE, independently of the number of resources used.
+//		numSym += uesToAllocate.size() * 20; // Assume five symbol per UE, independently of the number of resources used.
+		numSym += uesToAllocate.size(); // * m_beamManager->GetMaxNumBeamPairCandidates();
 		// Ask manager to update the last reporting timer (increase by the reporting period)
 		m_beamManager->IncreaseBeamReportingTimers(uesToAllocate);
 	}

@@ -136,6 +136,7 @@ public:
 	void SetBeamManagement (Ptr<MmWaveBeamManagement> beamMng);
 
 	void GetBeamGainForCsi ();
+	void GetBeamGainForCsi (Ptr<NetDevice> p);
 
 	BeamTrackingParams GetBeamsToTrackForEnb (Ptr<NetDevice> enb);
 
@@ -143,6 +144,11 @@ public:
 	 * \brief: This method is needed to update the Channel Map with the bf vectors that provides the best link for a given pair of eNB and UE
 	 */
 	void UpdateChannelMap ();
+
+	/*
+	 * \brief: This method updates the Channel Map to provided bf vectors
+	 */
+	void UpdateChannelMapWithBeamPair (BeamPairInfoStruct beamPairInfo);
 
 	Ptr<MmWaveBeamManagement> GetBeamManagement ();
 
