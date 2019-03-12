@@ -109,12 +109,28 @@ public:
 	/*
 	 * @brief Alt2: Determines the best beam pair (SINR) and tracks the 4 closest beams at UE side (left, right, up and down).
 	 */
-	void FindBeamPairCandidatesVicinity();
+	void Alt2BeamTrackingList();
+
+	std::vector<uint16_t> GetSideImmediateNeighborBeams(uint16_t beam_id, uint16_t num_beams_h, uint16_t num_beams_v);
+
+	std::vector<uint16_t> GetAlphaSpacedAzimuthBeamsFromOptimal(uint16_t opt_beam_id, uint16_t alpha, uint16_t num_beams_h);
 
 	/*
 	 * @brief Alt3: Alt2 and additional RX beams uniformly separated with alpha beams w.r.t best RX beam in the azimuth plane.
 	 */
-	void FindBeamPairCandidatesVicinityWithAlpha(uint16_t alpha);
+	void Alt3BeamTrackingList(uint16_t alpha);
+
+	/*
+	 * @brief Alt3: Alt2 and additional TX beams uniformly separated with alpha beams w.r.t best TX beam in the azimuth plane.
+	 */
+	void Alt4BeamTrackingList(uint16_t alpha);
+
+	/*
+	 * @brief Alt3: Alt2 and additional TX and RX beams uniformly separated with beta and alpha beams w.r.t best TX/RX beam in the azimuth plane.
+	 */
+	void Alt5BeamTrackingList(uint16_t beta, uint16_t alpha);
+
+	uint16_t GetCurrentNumBeamPairCandidates();
 
 	uint16_t GetMaxNumBeamPairCandidates();
 
@@ -204,8 +220,8 @@ public:
 
 	void SetBestScannedEnb(BeamPairInfoStruct bestEnbBeamInfo);
 
-	void SetCandidateBeamAlternative(uint16_t alt, uint16_t alpha);
-	void SetCandidateBeamAlternative(uint16_t alt, uint16_t alpha, bool memory);
+//	void SetCandidateBeamAlternative(uint16_t alt, uint16_t alpha);
+	void SetCandidateBeamAlternative(uint16_t alt, uint16_t alpha, uint16_t beta, bool memory);
 
 	void EnableSsbMeasMemory ();
 
@@ -240,7 +256,8 @@ private:
 	//std::vector<BeamPairInfoStruct> m_candidateBeams;
 	std::map <Ptr<NetDevice>,BeamTrackingParams> m_candidateBeamsMap;
 	uint16_t m_beamCandidateListStrategy;	// Selects the strategy to create the list of candidate beams
-	uint16_t m_alpha;	// Alpha parameter in strategy to create the list of candidate beams number 3
+	uint16_t m_alpha;	// Alpha parameter in strategy to create the list of candidate beams number 3 and 5
+	uint16_t m_beta;	// Alpha parameter in strategy to create the list of candidate beams number 4 and 5
 	bool m_beamReportingEnabled;	// Determines if beam reporting is enabled at this time
 	bool m_memorySs;	// Flag to determine if SS tracking decisions are to be made with the whole historical or only within the current SSB window
 

@@ -683,7 +683,9 @@ MmWaveFlexTtiMacScheduler::DoSchedTriggerReq (const struct MmWaveMacSchedSapProv
 	{
 		//FIXME: simplification here. The scheduler should allocate the necessary RBs, not all the RBs in a symbol (time).
 //		numSym += uesToAllocate.size() * 20; // Assume five symbol per UE, independently of the number of resources used.
-		numSym += uesToAllocate.size(); // * m_beamManager->GetMaxNumBeamPairCandidates();
+//		numSym += uesToAllocate.size(); // * m_beamManager->GetMaxNumBeamPairCandidates();
+		uint16_t num_csi_resources = m_beamManager->GetCurrentNumBeamPairCandidates();
+		numSym += ceil(num_csi_resources/16); // FIXME: Assume 16 CSI resources occupy 1 whole OFDM symbol. Large number of CSI resources will occupy all symbols
 		// Ask manager to update the last reporting timer (increase by the reporting period)
 		m_beamManager->IncreaseBeamReportingTimers(uesToAllocate);
 	}

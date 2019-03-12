@@ -144,7 +144,7 @@ public:
 
 	void SetTxPower(double powerDb);
 
-	void SetCandidateListForTrackingStrategy(uint16_t alt, uint16_t alpha, bool memory);
+	void SetCandidateListForTrackingStrategy(uint16_t alt, uint16_t alpha, uint16_t beta, bool memory);
 
 	// End of modification
 
@@ -224,7 +224,8 @@ private:
   	// Parameters to configure the list of candidate beams to be used for beam tracking.
   	uint8_t m_trackingListStrategy;
   	bool m_memory;	// If all SSB beam measurement combinations must be stored
-  	uint8_t m_alpha;	// Only used in Alt.3 in MmWaveBeamManagement
+  	uint16_t m_alpha;	// Only used in Alt.3 and Alt.5 in MmWaveBeamManagement
+  	uint16_t m_beta;	// Only used in Alt.4 and Alt.5 in MmWaveBeamManagement
 
   	std::string m_raytracingFilePath;	//Path to raytracing file (only for raytracing channel)
   	uint16_t m_startTraceIndex;			// Starting trace index

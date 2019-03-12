@@ -432,7 +432,7 @@ MmWaveHelper::InstallSingleUeDevice (Ptr<Node> n)
 	manager->SetRxCodebookFilePath(m_rxCodebookPath);
 	phy->SetBeamManagement (manager);
 	manager->InitializeBeamManagerUe(phyMacCommon, phy);
-	manager->SetCandidateBeamAlternative(m_trackingListStrategy, m_alpha, m_memory);
+	manager->SetCandidateBeamAlternative(m_trackingListStrategy, m_alpha, m_beta, m_memory);
 	// End of modification
 
 	device->Initialize();
@@ -1130,10 +1130,11 @@ MmWaveHelper::SetTxPower(double powerDb)
 }
 
 void
-MmWaveHelper::SetCandidateListForTrackingStrategy(uint16_t alt, uint16_t alpha, bool memory)
+MmWaveHelper::SetCandidateListForTrackingStrategy(uint16_t alt, uint16_t alpha, uint16_t beta, bool memory)
 {
 	m_trackingListStrategy = alt;
-	m_alpha = alpha;	// Only used in Alt.3 in MmWaveBeamManagement
+	m_alpha = alpha;		// Used in Alt.3 and Alt.5 in MmWaveBeamManagement
+	m_beta = beta;			// Used in Alt.4 and Alt.5 in MmWaveBeamManagement
 	m_memory = memory;
 }
 

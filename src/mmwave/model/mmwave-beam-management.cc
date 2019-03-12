@@ -51,6 +51,7 @@ MmWaveBeamManagement::MmWaveBeamManagement()
 	m_memorySs = true;
 	m_beamCandidateListStrategy = 2;
 	m_alpha = 2;
+	m_beta = 4;
 }
 
 
@@ -284,7 +285,8 @@ MmWaveBeamManagement::AddEnbSinr (Ptr<NetDevice> enbNetDevice, uint16_t enbBeamI
 }
 
 /*
- * Alt1. Beam tracking candidate list of beams.
+ * Alt1. Beam tracking strategy 1: List of candidate beams is created out of top N best SINR.
+ * N value is class member m_maxNumBeamPairCandidates.
  */
 void
 MmWaveBeamManagement::FindBeamPairCandidatesSinr ()
@@ -383,11 +385,69 @@ MmWaveBeamManagement::FindBeamPairCandidatesSinr ()
 	}
 }
 
+std::vector<uint16_t>
+MmWaveBeamManagement::GetSideImmediateNeighborBeams(uint16_t beam_id, uint16_t num_beams_h, uint16_t num_beams_v)
+{
+
+	uint16_t txBeamId = beam_id;
+	uint16_t txBeamIdRow = floor(txBeamId / num_beams_h);
+	uint16_t txBeamIdColumn = txBeamId % num_beams_h;
+
+	std::vector<uint16_t> beam_id_vector;
+	beam_id_vector.clear();
+
+	uint16_t tempTxBeamId;
+	// Same tx beam
+	tempTxBeamId = txBeamId;
+	beam_id_vector.push_back(tempTxBeamId);
+	// Right beam
+	tempTxBeamId = txBeamIdRow*num_beams_h + (txBeamIdColumn + 1)%num_beams_h;
+	beam_id_vector.push_back(tempTxBeamId);
+	// Left beam
+	tempTxBeamId = txBeamIdRow*num_beams_h + (num_beams_h + txBeamIdColumn - 1)%num_beams_h;
+	beam_id_vector.push_back(tempTxBeamId);
+	// Upper beam
+	if (num_beams_v > 1)
+	{
+		//	tempTxBeamId = ((txBeamIdRow + 1)*16 + txBeamIdColumn)%64;
+		tempTxBeamId = txBeamIdColumn + ((txBeamIdRow + 1)%num_beams_v)*num_beams_h;
+		beam_id_vector.push_back(tempTxBeamId);
+		// Bottom beam
+		if (num_beams_v > 2)
+		{
+			tempTxBeamId = txBeamIdColumn + ((num_beams_v+txBeamIdRow - 1)%num_beams_v)*num_beams_h;
+			beam_id_vector.push_back(tempTxBeamId);
+		}
+	}
+
+	return beam_id_vector;
+}
+
+
+std::vector<uint16_t>
+MmWaveBeamManagement::GetAlphaSpacedAzimuthBeamsFromOptimal(uint16_t opt_beam_id, uint16_t alpha, uint16_t num_beams_h)
+{
+	std::vector<uint16_t> extra_beam_id_vector;
+	extra_beam_id_vector.clear();
+	uint16_t beamIdEl = floor(opt_beam_id / num_beams_h);
+	uint16_t beamIdAz = opt_beam_id % num_beams_h;
+	uint16_t beam_offset = alpha;
+	while(beam_offset < num_beams_h)
+	{
+		uint16_t temp_beam_id = beamIdEl*num_beams_h + (beamIdAz+beam_offset)%num_beams_h;
+		extra_beam_id_vector.push_back(temp_beam_id);
+		beam_offset += alpha;
+	}
+
+	return extra_beam_id_vector;
+
+}
+
 /*
  * Alt2.
  */
 void
-MmWaveBeamManagement::FindBeamPairCandidatesVicinity ()
+MmWaveBeamManagement::Alt2BeamTrackingList ()
 {
 	for (std::map< Ptr<NetDevice>, std::map <sinrKey,SpectrumValue>>::iterator it1 = m_enbSinrMap.begin();
 				it1 != m_enbSinrMap.end();
@@ -400,97 +460,106 @@ MmWaveBeamManagement::FindBeamPairCandidatesVicinity ()
 //		double minSinr=0;
 		int nbands = m_enbSinrMap.begin()->second.begin()->second.GetSpectrumModel()->GetNumBands();
 		BeamPairInfoStruct beamPair, beamPairExtra;
-
-//		// Iterate along all the beam pairs and get the one with the largest SINR
-//		for (std::map <sinrKey,SpectrumValue>::iterator it2 = it1->second.begin();
-//						it2 != it1->second.end();
-//						++it2)
-//		{
-//			//int nbands = it2->second.GetSpectrumModel ()->GetNumBands ();  //FIXME: Do this twice, in and outside the loop?
-//			double avgSinr = Sum (it2->second)/nbands;
-//
-//			// Skip the current pair of beams if they provide lower SINR than the current candidate pairs
-//			if(avgSinr > minSinr)
-//			{
-//				beamPair.m_avgSinr = avgSinr;
-//				beamPair.m_sinrPsd = it2->second;
-//				beamPair.m_targetNetDevice = pDevice;
-//				beamPair.m_txBeamId = it2->first.first;
-//				beamPair.m_rxBeamId = it2->first.second;
-//				minSinr = avgSinr;
-//			}
-//		}
 		beamPair = GetBestScannedBeamPair();
 		// The best beam pair is the first one in the tracking list.
 		candidateBeamPairs.push_back(beamPair);
 
 		// Now construct the rest of the beam pairs in the immediate vicinity
 		// TODO: Hard-coded for tx 16x4 and rx 8x2 arrays. Make it compatible with any geometry
-		uint16_t txBeamId = beamPair.m_txBeamId;
-		uint16_t rxBeamId = beamPair.m_rxBeamId;
-		uint16_t txBeamIdRow = txBeamId / 16;
-		uint16_t txBeamIdColumn = txBeamId % 16;
-		uint16_t rxBeamIdRow = rxBeamId / 8;
-		uint16_t rxBeamIdColumn = rxBeamId % 8;
 
-		for (uint16_t numTxBeams = 0; numTxBeams < 5; numTxBeams++)
+		std::vector<uint16_t> tx_beam_ids = GetSideImmediateNeighborBeams(beamPair.m_txBeamId,16,4);
+		std::vector<uint16_t> rx_beam_ids = GetSideImmediateNeighborBeams(beamPair.m_rxBeamId,8,2);
+
+		for (uint16_t numTxBeams = 0; numTxBeams < tx_beam_ids.size(); numTxBeams++)
 		{
-			uint16_t tempTxBeamId;
-			switch(numTxBeams)
+			uint16_t tempTxBeamId = tx_beam_ids.at(numTxBeams);
+			for(uint16_t numRxBeams = 0; numRxBeams < rx_beam_ids.size(); numRxBeams++)
 			{
-			case 0:	// Same tx beam
-				tempTxBeamId = txBeamId;
-				break;
-			case 1:	// Right beam
-				tempTxBeamId = txBeamIdRow*16 + (txBeamIdColumn + 1)%16;
-				break;
-			case 2:	// Left beam
-				if (txBeamIdColumn == 0)
-					tempTxBeamId = txBeamIdRow*16 + 15;
-				else
-					tempTxBeamId = txBeamIdRow*16 + (txBeamIdColumn - 1);
-				break;
-			case 3: // Upper beam
-				tempTxBeamId = ((txBeamIdRow + 1)*16 + txBeamIdColumn)%64;
-				break;
-			case 4: // Bottom beam
-				if (txBeamIdRow == 0)
-					tempTxBeamId = 48 + txBeamIdColumn;
-				else
-					tempTxBeamId = ((txBeamIdRow - 1)*16 + txBeamIdColumn);
-				break;
-			default:
-				break;
-			}
-
-			for(uint16_t numRxBeams = 0; numRxBeams < 4; numRxBeams++)
-			{
-				uint16_t tempRxBeamId;
-				switch(numRxBeams)
-				{
-				case 0:	// Same tx beam
-					tempRxBeamId = rxBeamId;
-					break;
-				case 1:	// Right beam
-					tempRxBeamId = rxBeamIdRow*8 + (rxBeamIdColumn + 1)%8;
-					break;
-				case 2:	// Left beam
-					if (rxBeamIdColumn == 0)
-						tempRxBeamId = rxBeamIdRow*8 + 7;
-					else
-						tempRxBeamId = rxBeamIdRow*8 + (rxBeamIdColumn - 1);
-					break;
-				case 3: // vertical beam
-					tempRxBeamId = ((rxBeamIdRow + 1)*8 + rxBeamIdColumn)%16;
-					break;
-				default:
-					break;
-				}
-
 				if (numTxBeams == 0 && numRxBeams == 0)
 				{
 					continue;	//This one is already added in the vector
 				}
+				uint16_t tempRxBeamId = rx_beam_ids.at(numRxBeams);
+				std::map <sinrKey,SpectrumValue>::iterator itExtra =
+								it1->second.find(std::make_pair(tempTxBeamId,tempRxBeamId));
+				beamPairExtra.m_targetNetDevice = pDevice;
+				beamPairExtra.m_txBeamId = tempTxBeamId;
+				beamPairExtra.m_rxBeamId = tempRxBeamId;
+				if(itExtra != it1->second.end())	// Check whether SINR info is already available in the map
+				{
+					beamPairExtra.m_avgSinr = Sum(itExtra->second)/nbands;
+					beamPairExtra.m_sinrPsd = itExtra->second;
+				}
+				else
+				{
+					//No SINR value in the map. Just populating beam ids
+					beamPairExtra.m_avgSinr = -1;
+					beamPairExtra.m_sinrPsd = 0;
+				}
+				candidateBeamPairs.push_back(beamPairExtra);
+			}
+
+
+		}
+
+		//to map:
+		BeamTrackingParams beamTrackingStruct;
+		beamTrackingStruct.m_beamPairList = candidateBeamPairs;
+		beamTrackingStruct.m_numBeamPairs = candidateBeamPairs.size();
+		beamTrackingStruct.csiReportPeriod = static_cast<MmWavePhyMacCommon::CsiReportingPeriod>(m_beamReportingPeriod);
+//		std::map <Ptr<NetDevice>,BeamTrackingParams>::iterator itMap = m_candidateBeamsMap.find(pDevice);
+//		if(itMap == m_candidateBeamsMap.end())
+//		{
+//			m_candidateBeamsMap.insert(std::pair<Ptr<NetDevice>,BeamTrackingParams>(pDevice,beamTrackingStruct));
+//		}
+//		else
+//		{
+//			itMap->second = beamTrackingStruct;
+//		}
+		UpdateBeamTrackingInfo(pDevice,beamTrackingStruct);
+	}
+}
+
+
+void
+MmWaveBeamManagement::Alt3BeamTrackingList (uint16_t alpha)
+{
+	for (std::map< Ptr<NetDevice>, std::map <sinrKey,SpectrumValue>>::iterator it1 = m_enbSinrMap.begin();
+				it1 != m_enbSinrMap.end();
+				++it1)
+	{
+		Ptr<NetDevice> pDevice = it1->first;
+		std::vector<BeamPairInfoStruct> candidateBeamPairs;
+
+		// Internal SINR value to control the size of the candidate beam vector.
+//		double minSinr=0;
+		int nbands = m_enbSinrMap.begin()->second.begin()->second.GetSpectrumModel()->GetNumBands();
+		BeamPairInfoStruct beamPair, beamPairExtra;
+		beamPair = GetBestScannedBeamPair();
+		// The best beam pair is the first one in the tracking list.
+		candidateBeamPairs.push_back(beamPair);
+
+		// Now construct the rest of the beam pairs in the immediate vicinity
+		// TODO: Hard-coded for tx 16x4 and rx 8x2 arrays. Make it compatible with any geometry
+
+		std::vector<uint16_t> tx_beam_ids = GetSideImmediateNeighborBeams(beamPair.m_txBeamId,16,4);
+		std::vector<uint16_t> rx_beam_ids = GetSideImmediateNeighborBeams(beamPair.m_rxBeamId,8,2);
+
+		std::vector<uint16_t> add_rx_beam_ids = GetAlphaSpacedAzimuthBeamsFromOptimal(beamPair.m_rxBeamId,alpha,8);
+
+		// Append additional vector at the end of the original rx beam id vector
+		rx_beam_ids.insert(rx_beam_ids.end(),add_rx_beam_ids.begin(),add_rx_beam_ids.end());
+
+		for (uint16_t numTxBeams = 0; numTxBeams < tx_beam_ids.size(); numTxBeams++)
+		{
+			uint16_t tempTxBeamId = tx_beam_ids.at(numTxBeams);
+			for(uint16_t numRxBeams = 0; numRxBeams < rx_beam_ids.size(); numRxBeams++)
+			{
+				if (numTxBeams == 0 && numRxBeams == 0)
+				{
+					continue;	//This one is already added in the vector
+				}
+				uint16_t tempRxBeamId = rx_beam_ids.at(numRxBeams);
 				std::map <sinrKey,SpectrumValue>::iterator itExtra =
 								it1->second.find(std::make_pair(tempTxBeamId,tempRxBeamId));
 				beamPairExtra.m_targetNetDevice = pDevice;
@@ -533,76 +602,188 @@ MmWaveBeamManagement::FindBeamPairCandidatesVicinity ()
 
 
 /*
- * Alt3
+ * Alt.4
  */
 void
-MmWaveBeamManagement::FindBeamPairCandidatesVicinityWithAlpha(uint16_t alpha)
+MmWaveBeamManagement::Alt4BeamTrackingList (uint16_t alpha)
 {
-	// Get list of beams from Alt2 strategy
-	FindBeamPairCandidatesVicinity();
-
-	if (alpha < 1 || alpha > 8)	//Invalid values
-		return;
-
-	int nbands = m_enbSinrMap.begin()->second.begin()->second.GetSpectrumModel()->GetNumBands();
-
-	// For each gNB, complete the list with the alpha separated rx beams
 	for (std::map< Ptr<NetDevice>, std::map <sinrKey,SpectrumValue>>::iterator it1 = m_enbSinrMap.begin();
 				it1 != m_enbSinrMap.end();
 				++it1)
 	{
 		Ptr<NetDevice> pDevice = it1->first;
-		std::map <Ptr<NetDevice>,BeamTrackingParams>::iterator itMap = m_candidateBeamsMap.find(pDevice);
-		BeamTrackingParams originalBeamTrackingStruct = itMap->second;
-		BeamTrackingParams modBeamTrackingStruct = originalBeamTrackingStruct;
-		BeamPairInfoStruct bestBeamPair = originalBeamTrackingStruct.m_beamPairList.at(0);	// Copy the structure to have the beam ids and pointer to eNB
-		BeamPairInfoStruct additionalBeamPair = bestBeamPair;
-		uint16_t txBeam = bestBeamPair.m_txBeamId;
-		uint16_t el = additionalBeamPair.m_rxBeamId / 8;
-		uint16_t az = additionalBeamPair.m_rxBeamId % 8;
-		uint16_t rxBeam = alpha;	// step in terms of beam index
-		uint8_t numTrackingBeams = itMap->second.m_numBeamPairs;
-		while (rxBeam < 8)
+		std::vector<BeamPairInfoStruct> candidateBeamPairs;
+
+		// Internal SINR value to control the size of the candidate beam vector.
+//		double minSinr=0;
+		int nbands = m_enbSinrMap.begin()->second.begin()->second.GetSpectrumModel()->GetNumBands();
+		BeamPairInfoStruct beamPair, beamPairExtra;
+		beamPair = GetBestScannedBeamPair();
+		// The best beam pair is the first one in the tracking list.
+		candidateBeamPairs.push_back(beamPair);
+
+		// Now construct the rest of the beam pairs in the immediate vicinity
+		// TODO: Hard-coded for tx 16x4 and rx 8x2 arrays. Make it compatible with any geometry
+
+		std::vector<uint16_t> tx_beam_ids = GetSideImmediateNeighborBeams(beamPair.m_txBeamId,16,4);
+		std::vector<uint16_t> rx_beam_ids = GetSideImmediateNeighborBeams(beamPair.m_rxBeamId,8,2);
+
+		uint16_t alpha = 4;
+		std::vector<uint16_t> add_tx_beam_ids = GetAlphaSpacedAzimuthBeamsFromOptimal(beamPair.m_txBeamId,alpha,16);
+
+		// Append additional vector at the end of the original tx beam id vector
+		tx_beam_ids.insert(tx_beam_ids.end(),add_tx_beam_ids.begin(),add_tx_beam_ids.end());
+
+		for (uint16_t numTxBeams = 0; numTxBeams < tx_beam_ids.size(); numTxBeams++)
 		{
-
-			additionalBeamPair.m_rxBeamId = (az + rxBeam)%8 + el*8;	//FIXME: What if rxBeamId > 8?
-
-			std::map <sinrKey,SpectrumValue>::iterator itExtra =
-											it1->second.find(std::make_pair(txBeam,rxBeam));
-
-			// If SINR info is already available in the map, add the additiona pair of beams to track in the SINR-ordered candidate beams vector
-			if(itExtra != it1->second.end())
+			uint16_t tempTxBeamId = tx_beam_ids.at(numTxBeams);
+			for(uint16_t numRxBeams = 0; numRxBeams < rx_beam_ids.size(); numRxBeams++)
 			{
-				additionalBeamPair.m_avgSinr = Sum(itExtra->second)/nbands;
-				additionalBeamPair.m_sinrPsd = itExtra->second;
-				// list of beam pairs to track is ordered in descending avg SINR value.
-				// Iterate along the modified list and place the new entry in the right position
-//				double aux_sinr = 0;
-				std::vector<BeamPairInfoStruct>::iterator orderedIt = modBeamTrackingStruct.m_beamPairList.begin();
-				uint16_t insert_index = 0;
-				while (orderedIt != modBeamTrackingStruct.m_beamPairList.end() && orderedIt->m_avgSinr >= additionalBeamPair.m_avgSinr)
+				if (numTxBeams == 0 && numRxBeams == 0)
 				{
-					++orderedIt;	// Point to next iteration
-					insert_index++;
+					continue;	//This one is already added in the vector
 				}
-				modBeamTrackingStruct.m_beamPairList.insert(orderedIt,additionalBeamPair);
-			}
-			// No SINR info, just place the new pair of beams to track at the end of the vector.
-			else
-			{
-				additionalBeamPair.m_avgSinr = -1;
-				additionalBeamPair.m_sinrPsd = 0;
-				modBeamTrackingStruct.m_beamPairList.push_back(additionalBeamPair);
+				uint16_t tempRxBeamId = rx_beam_ids.at(numRxBeams);
+				std::map <sinrKey,SpectrumValue>::iterator itExtra =
+								it1->second.find(std::make_pair(tempTxBeamId,tempRxBeamId));
+				beamPairExtra.m_targetNetDevice = pDevice;
+				beamPairExtra.m_txBeamId = tempTxBeamId;
+				beamPairExtra.m_rxBeamId = tempRxBeamId;
+				if(itExtra != it1->second.end())	// Check whether SINR info is already available in the map
+				{
+					beamPairExtra.m_avgSinr = Sum(itExtra->second)/nbands;
+					beamPairExtra.m_sinrPsd = itExtra->second;
+				}
+				else
+				{
+					//No SINR value in the map. Just populating beam ids
+					beamPairExtra.m_avgSinr = -1;
+					beamPairExtra.m_sinrPsd = 0;
+				}
+				candidateBeamPairs.push_back(beamPairExtra);
 			}
 
-			numTrackingBeams++;
-			rxBeam = rxBeam + alpha;
+
 		}
-		modBeamTrackingStruct.m_numBeamPairs = numTrackingBeams;
 
-		UpdateBeamTrackingInfo(pDevice,modBeamTrackingStruct);
+		//to map:
+		BeamTrackingParams beamTrackingStruct;
+		beamTrackingStruct.m_beamPairList = candidateBeamPairs;
+		beamTrackingStruct.m_numBeamPairs = candidateBeamPairs.size();
+		beamTrackingStruct.csiReportPeriod = static_cast<MmWavePhyMacCommon::CsiReportingPeriod>(m_beamReportingPeriod);
+//		std::map <Ptr<NetDevice>,BeamTrackingParams>::iterator itMap = m_candidateBeamsMap.find(pDevice);
+//		if(itMap == m_candidateBeamsMap.end())
+//		{
+//			m_candidateBeamsMap.insert(std::pair<Ptr<NetDevice>,BeamTrackingParams>(pDevice,beamTrackingStruct));
+//		}
+//		else
+//		{
+//			itMap->second = beamTrackingStruct;
+//		}
+		UpdateBeamTrackingInfo(pDevice,beamTrackingStruct);
+	}
+}
+
+
+/*
+ * Alt.5
+ */
+void
+MmWaveBeamManagement::Alt5BeamTrackingList (uint16_t beta, uint16_t alpha)
+{
+	for (std::map< Ptr<NetDevice>, std::map <sinrKey,SpectrumValue>>::iterator it1 = m_enbSinrMap.begin();
+				it1 != m_enbSinrMap.end();
+				++it1)
+	{
+		Ptr<NetDevice> pDevice = it1->first;
+		std::vector<BeamPairInfoStruct> candidateBeamPairs;
+
+		// Internal SINR value to control the size of the candidate beam vector.
+//		double minSinr=0;
+		int nbands = m_enbSinrMap.begin()->second.begin()->second.GetSpectrumModel()->GetNumBands();
+		BeamPairInfoStruct beamPair, beamPairExtra;
+		beamPair = GetBestScannedBeamPair();
+		// The best beam pair is the first one in the tracking list.
+		candidateBeamPairs.push_back(beamPair);
+
+		// Now construct the rest of the beam pairs in the immediate vicinity
+		// TODO: Hard-coded for tx 16x4 and rx 8x2 arrays. Make it compatible with any geometry
+
+		std::vector<uint16_t> tx_beam_ids = GetSideImmediateNeighborBeams(beamPair.m_txBeamId,16,4);
+		std::vector<uint16_t> rx_beam_ids = GetSideImmediateNeighborBeams(beamPair.m_rxBeamId,8,2);
+
+		std::vector<uint16_t> add_tx_beam_ids = GetAlphaSpacedAzimuthBeamsFromOptimal(beamPair.m_txBeamId,beta,16);
+		std::vector<uint16_t> add_rx_beam_ids = GetAlphaSpacedAzimuthBeamsFromOptimal(beamPair.m_rxBeamId,alpha,8);
+
+		// Append additional vector at the end of the original tx beam id vector
+		tx_beam_ids.insert(tx_beam_ids.end(),add_tx_beam_ids.begin(),add_tx_beam_ids.end());
+		// Append additional vector at the end of the original rx beam id vector
+		rx_beam_ids.insert(rx_beam_ids.end(),add_rx_beam_ids.begin(),add_rx_beam_ids.end());
+
+		for (uint16_t numTxBeams = 0; numTxBeams < tx_beam_ids.size(); numTxBeams++)
+		{
+			uint16_t tempTxBeamId = tx_beam_ids.at(numTxBeams);
+			for(uint16_t numRxBeams = 0; numRxBeams < rx_beam_ids.size(); numRxBeams++)
+			{
+				if (numTxBeams == 0 && numRxBeams == 0)
+				{
+					continue;	//This one is already added in the vector
+				}
+				uint16_t tempRxBeamId = rx_beam_ids.at(numRxBeams);
+				std::map <sinrKey,SpectrumValue>::iterator itExtra =
+								it1->second.find(std::make_pair(tempTxBeamId,tempRxBeamId));
+				beamPairExtra.m_targetNetDevice = pDevice;
+				beamPairExtra.m_txBeamId = tempTxBeamId;
+				beamPairExtra.m_rxBeamId = tempRxBeamId;
+				if(itExtra != it1->second.end())	// Check whether SINR info is already available in the map
+				{
+					beamPairExtra.m_avgSinr = Sum(itExtra->second)/nbands;
+					beamPairExtra.m_sinrPsd = itExtra->second;
+				}
+				else
+				{
+					//No SINR value in the map. Just populating beam ids
+					beamPairExtra.m_avgSinr = -1;
+					beamPairExtra.m_sinrPsd = 0;
+				}
+				candidateBeamPairs.push_back(beamPairExtra);
+			}
+
+
+		}
+
+		//to map:
+		BeamTrackingParams beamTrackingStruct;
+		beamTrackingStruct.m_beamPairList = candidateBeamPairs;
+		beamTrackingStruct.m_numBeamPairs = candidateBeamPairs.size();
+		beamTrackingStruct.csiReportPeriod = static_cast<MmWavePhyMacCommon::CsiReportingPeriod>(m_beamReportingPeriod);
+//		std::map <Ptr<NetDevice>,BeamTrackingParams>::iterator itMap = m_candidateBeamsMap.find(pDevice);
+//		if(itMap == m_candidateBeamsMap.end())
+//		{
+//			m_candidateBeamsMap.insert(std::pair<Ptr<NetDevice>,BeamTrackingParams>(pDevice,beamTrackingStruct));
+//		}
+//		else
+//		{
+//			itMap->second = beamTrackingStruct;
+//		}
+		UpdateBeamTrackingInfo(pDevice,beamTrackingStruct);
+	}
+}
+
+uint16_t
+MmWaveBeamManagement::GetCurrentNumBeamPairCandidates()
+{
+	uint16_t numBeamPairs = 0;
+	if (m_candidateBeamsMap.empty() == false)
+	{
+		for(std::map <Ptr<NetDevice>,BeamTrackingParams>::iterator it = m_candidateBeamsMap.begin();
+					it != m_candidateBeamsMap.end(); ++it)
+		{
+			numBeamPairs += it->second.m_beamPairList.size();
+		}
 	}
 
+	return numBeamPairs;
 }
 
 uint16_t
@@ -629,10 +810,16 @@ MmWaveBeamManagement::FindBeamPairCandidates()
 		FindBeamPairCandidatesSinr();
 		break;
 	case 2:
-		FindBeamPairCandidatesVicinity();
+		Alt2BeamTrackingList();
 		break;
 	case 3:
-		FindBeamPairCandidatesVicinityWithAlpha(m_alpha);
+		Alt3BeamTrackingList(m_alpha);
+		break;
+	case 4:
+		Alt4BeamTrackingList(m_beta);
+		break;
+	case 5:
+		Alt5BeamTrackingList(m_beta,m_alpha);
 		break;
 	default:
 		break;
@@ -1039,48 +1226,64 @@ MmWaveBeamManagement::UpdateBeamTrackingInfoValues (Ptr<NetDevice> peer, BeamTra
 	}
 }
 
-void
-MmWaveBeamManagement::SetCandidateBeamAlternative(uint16_t alt, uint16_t alpha)
-{
-	m_beamCandidateListStrategy = alt;
-	if (alt == 3 && (alpha < 0 || alpha > 7))
-	{
-		std::cout << "Wrong alpha parameter. Using Alt.2 instead of Alt.3" << std::endl;
-		m_alpha = 0;
-		m_beamCandidateListStrategy = 2;
-	}
-	m_alpha = alpha;
-	if (m_beamReportingEnabled && m_beamReportingPeriod > 0 && alt > 1)
-	{
-		m_memorySs = false;
-	}
-}
+//void
+//MmWaveBeamManagement::SetCandidateBeamAlternative(uint16_t alt, uint16_t alpha)
+//{
+//	m_beamCandidateListStrategy = alt;
+//	if (alt == 3 && (alpha < 0 || alpha > 7))
+//	{
+//		std::cout << "Wrong alpha parameter. Using Alt.2 instead of Alt.3" << std::endl;
+//		m_alpha = 0;
+//		m_beamCandidateListStrategy = 2;
+//	}
+//	m_alpha = alpha;
+//	if (m_beamReportingEnabled && m_beamReportingPeriod > 0 && alt > 1)
+//	{
+//		m_memorySs = false;
+//	}
+//}
 
 
 void
-MmWaveBeamManagement::SetCandidateBeamAlternative(uint16_t alt, uint16_t alpha, bool memory)
+MmWaveBeamManagement::SetCandidateBeamAlternative(uint16_t alt, uint16_t alpha, uint16_t beta, bool memory)
 {
 	m_beamCandidateListStrategy = alt;
 	m_alpha = alpha;
 	m_memorySs = memory;
-	if (alt < 1 || alt > 3)
+	if (alt < 0 || alt > 5)
 	{
 		std::cout << "Unrecognized beam tracking list strategy option " << alt << ". Please check." << std::endl;
 		m_beamCandidateListStrategy = 2;
 	}
+	else if (alt == 0)
+	{
+		m_memorySs = true;
+		m_maxNumBeamPairCandidates = 1024;
+	}
 	// Check Alt 1 configuration
 	else if (alt == 1)
 	{
-		m_memorySs = true;
+		m_memorySs = false;
+		//m_maxNumBeamPairCandidates = 1024;
 	}
 	// Check Alt 3 configuration
 	else if (alt == 3 && (alpha < 0 || alpha > 7))
 	{
-		std::cout << "Wrong alpha parameter. Using Alt.2 instead of Alt.3" << std::endl;
-		m_alpha = 0;
-		m_beamCandidateListStrategy = 2;
+		std::cout << "Wrong alpha parameter. Using Alt.3 with alpha = 2" << std::endl;
+		m_alpha = 2;
 	}
-
+	// Check Alt 4 configuration
+	else if (alt == 4 && (beta < 0 || beta > 15))
+	{
+		std::cout << "Wrong alpha parameter. Using Alt.4 with alpha = 4" << std::endl;
+		m_beta = 4;
+	}
+	// Check Alt 5 configuration
+	else if (alt == 5)
+	{
+		m_alpha = 2;
+		m_beta = 4;
+	}
 }
 
 void

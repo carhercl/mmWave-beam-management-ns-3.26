@@ -468,8 +468,8 @@ MmWaveChannelRaytracing::CalSnr (
 	}
 	*/
 
-	/* Unity traces: measurement resolution is 1 m */
-	uint16_t traceIndex = (m_startDistance+time*m_speed);
+	/* Unity traces: measurement resolution is 0.1 m (10 measurement points per meter)*/
+	uint16_t traceIndex = (m_startDistance+(time*m_speed*10));
 	static uint16_t currentIndex = m_startDistance;
 	if(traceIndex > g_numPdps)
 	{
@@ -691,9 +691,9 @@ MmWaveChannelRaytracing::DoCalcRxPowerSpectralDensity (Ptr<const SpectrumValue> 
 	}
 	*/
 
-	/* Unity traces: measurement resolution is 1 m */
+	/* Unity traces: measurement resolution is 0.1 m (10 measurement points per meter)*/
 //	uint16_t update_factor = 10;
-	uint16_t traceIndex = (m_startDistance+time*m_speed);
+	uint16_t traceIndex = (m_startDistance+(time*m_speed*10));
 	static uint16_t currentIndex = m_startDistance;
 	if(traceIndex > g_numPdps)
 	{
@@ -953,7 +953,7 @@ MmWaveChannelRaytracing::GenSinglePathKron (double hAngle, double vAngle, uint8_
 	for (int hIndex = 1; hIndex < hSize; hIndex++)
 	{
 		//double complex_phase = 2*M_PI*m_antennaSeparation*sin(-hAngle)*cos(vAngle);
-		double complex_phase = 2*M_PI*m_antennaSeparation*hIndex*sin(-hAngle)*cos(vAngle);
+		double complex_phase = 2*M_PI*m_antennaSeparation*hIndex*cos(hAngle)*sin(vAngle);
 		steeringVector_h.push_back(std::complex<double> (cos(complex_phase), sin(complex_phase)));
 	}
 
@@ -962,13 +962,13 @@ MmWaveChannelRaytracing::GenSinglePathKron (double hAngle, double vAngle, uint8_
 	for (int vIndex = 1; vIndex < vSize; vIndex++)
 	{
 		//double complex_phase = 2*M_PI*m_antennaSeparation*sin(-hAngle)*sin(vAngle);
-		double complex_phase = 2*M_PI*m_antennaSeparation*vIndex*sin(-hAngle)*sin(vAngle);
+		double complex_phase = 2*M_PI*m_antennaSeparation*vIndex*cos(vAngle);
 		steeringVector_v.push_back(std::complex<double> (cos(complex_phase), sin(complex_phase)));
 	}
 
 	// The steering vector of the rectangular array is the kronecker product of the previous two steering vectors
 	// Note that the kronecker product of two vectors is another vector length equals to the product of the two vectors length
-	singlePath = KroneckerProductVector(steeringVector_h, steeringVector_v);
+	singlePath = KroneckerProductVector(steeringVector_v, steeringVector_h);
 	return singlePath;
 }
 
@@ -976,9 +976,10 @@ MmWaveChannelRaytracing::GenSinglePathKron (double hAngle, double vAngle, uint8_
  * @brief: Function that returns the Kronecker (direct) product of two complex vectors representing the steering vectors of the horizontal and vertical planes of a rectangular antenna array. Please respect order
  * @param a_h: Steering vector of the horizontal linear array
  * @param a_h: Steering vector of the vertical linear array
+ * @note: Careful with the product terms order. Consecutive codewords are group for the same elevation angle, so first term should be the vertical vector.
  */
 complexVector_t
-MmWaveChannelRaytracing::KroneckerProductVector(complexVector_t a_h, complexVector_t a_v) const
+MmWaveChannelRaytracing::KroneckerProductVector(complexVector_t a_v, complexVector_t a_h) const
 {
 	unsigned int size_h, size_v, size_kron_vector;
 	complexVector_t kron_vector;
@@ -988,9 +989,9 @@ MmWaveChannelRaytracing::KroneckerProductVector(complexVector_t a_h, complexVect
 	size_kron_vector = size_h*size_v;
 	kron_vector.reserve(size_kron_vector);
 
-	for (unsigned int h = 0; h < a_h.size(); h++)
+	for (unsigned int v = 0; v < a_v.size(); v++)
 	{
-		for (unsigned int v = 0; v < a_v.size(); v++)
+		for (unsigned int h = 0; h < a_h.size(); h++)
 		{
 			std::complex<double> value = a_h.at(h) * a_v.at(v);
 			kron_vector.push_back(value);
@@ -1012,7 +1013,7 @@ MmWaveChannelRaytracing::GetChannelGain (Ptr<const SpectrumValue> txPsd, Ptr<mmW
 	double t = time.GetSeconds ();
 	Ptr<SpectrumValue> tempPsd = Copy<SpectrumValue> (txPsd);
 	bool noSpeed = false;
-	if (speed == 0)
+//	if (speed == 0)
 	{
 		noSpeed = true;
 	}
