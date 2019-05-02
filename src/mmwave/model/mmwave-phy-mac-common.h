@@ -872,6 +872,8 @@ public:
 	// SS burst and SS burst set period in ms
 	typedef enum SsBurstPeriods
 	{
+		ms0 = 0,
+		ms1 = 1,
 		ms5 = 5,
 		ms10 = 10,
 		ms20 = 20,

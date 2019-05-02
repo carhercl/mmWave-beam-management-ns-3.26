@@ -65,7 +65,7 @@ MmWaveChannelRaytracing::MmWaveChannelRaytracing ()
 	:m_antennaSeparation(0.5)
 {
 	m_uniformRv = CreateObject<UniformRandomVariable> ();
-
+	m_transitory_time_seconds = 3.0;
 	/*
 	 * Select one method to load traces. LoadTracesMod plugs Unity traces in.
 	 */
@@ -469,16 +469,23 @@ MmWaveChannelRaytracing::CalSnr (
 	*/
 
 	/* Unity traces: measurement resolution is 0.1 m (10 measurement points per meter)*/
-	uint16_t traceIndex = (m_startDistance+(time*m_speed*10));
+	double corrected_time = time - m_transitory_time_seconds;
+	if (corrected_time < 0.0)
+	{
+		corrected_time = 0.0;
+	}
+	uint16_t update_factor = 10;
+	uint16_t traceIndex = (m_startDistance+(corrected_time*m_speed*update_factor));
 	static uint16_t currentIndex = m_startDistance;
 	if(traceIndex > g_numPdps)
 	{
 		NS_FATAL_ERROR ("The maximum trace index is " << g_numPdps);
 	}
 
-	if(traceIndex != currentIndex)
+	if(time > m_transitory_time_seconds && traceIndex != currentIndex)
 	{
 		currentIndex = traceIndex;
+		m_fingerprinting->SetCurrentPathIndex(traceIndex);
 		m_channelMatrixMap.clear();
 	}
 	//NS_LOG_UNCOND (traceIndex);
@@ -692,17 +699,24 @@ MmWaveChannelRaytracing::DoCalcRxPowerSpectralDensity (Ptr<const SpectrumValue> 
 	*/
 
 	/* Unity traces: measurement resolution is 0.1 m (10 measurement points per meter)*/
-//	uint16_t update_factor = 10;
-	uint16_t traceIndex = (m_startDistance+(time*m_speed*10));
+	double corrected_time = time - m_transitory_time_seconds;
+	if (corrected_time < 0.0)
+	{
+		corrected_time = 0.0;
+	}
+	uint16_t update_factor = 10;
+	uint16_t traceIndex = (m_startDistance+(corrected_time*m_speed*update_factor));
+
 	static uint16_t currentIndex = m_startDistance;
 	if(traceIndex > g_numPdps)
 	{
 		NS_FATAL_ERROR ("The maximum trace index is " << g_numPdps);
 	}
 
-	if(traceIndex != currentIndex)
+	if(time > m_transitory_time_seconds && traceIndex != currentIndex)
 	{
 		currentIndex = traceIndex;
+		m_fingerprinting->SetCurrentPathIndex(traceIndex);
 		m_channelMatrixMap.clear();
 	}
 //	NS_LOG_UNCOND (traceIndex);
@@ -1013,7 +1027,7 @@ MmWaveChannelRaytracing::GetChannelGain (Ptr<const SpectrumValue> txPsd, Ptr<mmW
 	double t = time.GetSeconds ();
 	Ptr<SpectrumValue> tempPsd = Copy<SpectrumValue> (txPsd);
 	bool noSpeed = false;
-//	if (speed == 0)
+	if (speed == 0)
 	{
 		noSpeed = true;
 	}
@@ -1216,6 +1230,19 @@ MmWaveChannelRaytracing::SetBeamSweepingVector (Ptr<NetDevice> ueDevice, Ptr<Net
 
 }
 
+
+void
+MmWaveChannelRaytracing::SetFingerprintingInRt (Ptr<FingerprintingDatabase> fp)
+{
+	m_fingerprinting = fp;
+}
+
+
+void
+MmWaveChannelRaytracing::SetTransitoryTime (double t)
+{
+	m_transitory_time_seconds = t;
+}
 
 
 

@@ -34,6 +34,8 @@ typedef std::vector< std::complex<double> > complexVector_t;
 typedef std::vector<complexVector_t> complex2DVector_t;
 typedef std::pair<uint16_t, uint16_t > sinrKey;		// <txBeamId,rxBeamId>
 
+typedef std::pair<double, double> coordinate_t;	// UE coordinate in XY for finger printing
+
 class MmWaveEnbPhy;
 class MmWaveUePhy;
 
@@ -58,10 +60,50 @@ struct BeamPairInfoStruct
 typedef struct BeamTrackingParams
 {
 	std::vector<BeamPairInfoStruct> m_beamPairList;
-	uint8_t m_numBeamPairs;
+	uint16_t m_numBeamPairs;
 	MmWavePhyMacCommon::CsiReportingPeriod csiReportPeriod;
 	Time m_csiResourceLastAllocation;	// Determines the last time csi resources where allocated for beam tracking this user
 } BeamTrackingParams;
+
+
+
+class FingerprintingDatabase : public Object
+{
+public:
+	FingerprintingDatabase ();
+	virtual ~FingerprintingDatabase ();
+
+	static TypeId GetTypeId (void);
+
+	BeamTrackingParams FillBeamTrackingParamsFields(uint16_t num_pairs, std::vector<double> tx_beams_ids, std::vector<double> rx_beams_ids);
+
+	/*
+	 * Reads finger printing file and initializes internal finger printing map
+	 */
+	void LoadFingerPrinting();
+	void LoadFingerPrinting (std::string inputFilename);
+
+	std::string m_fingerprintingFilePath;
+
+	inline void SetFingerprintingFilePath(std::string path)
+	{
+		m_fingerprintingFilePath = path;
+	}
+
+	void SetCurrentPathIndex (uint16_t id);
+
+	uint16_t GetCurrentPathIndex();
+
+	BeamTrackingParams GetBeamTrackingPairsCurrentIndex ();
+
+
+private:
+
+	std::map <coordinate_t,BeamTrackingParams> m_fingerPrintingMap;
+	uint16_t m_current_ue_index;
+
+};
+
 
 class MmWaveBeamManagement : public Object
 {
@@ -102,6 +144,11 @@ public:
 	void AddEnbSinr (Ptr<NetDevice> enbNetDevice, uint16_t enbBeamId, uint16_t ueBeamId, SpectrumValue sinr);
 
 	/*
+	 * @brief Alt0: Tracks all beam combinations.
+	 */
+	void Alt0BeamTrackingList();
+
+	/*
 	 * @brief Alt1: Determines the candidate beam pairs to track according to their avg SINR value.
 	 */
 	void FindBeamPairCandidatesSinr();
@@ -129,6 +176,11 @@ public:
 	 * @brief Alt3: Alt2 and additional TX and RX beams uniformly separated with beta and alpha beams w.r.t best TX/RX beam in the azimuth plane.
 	 */
 	void Alt5BeamTrackingList(uint16_t beta, uint16_t alpha);
+
+	/*
+	 * @brief Beam tracking based on fingerprinting alternative 1. Only the optimal beam pair is tracked.
+	 */
+	void FingerPrinting_1();
 
 	uint16_t GetCurrentNumBeamPairCandidates();
 
@@ -229,6 +281,8 @@ public:
 
 	void ConfigureBeamReporting ();
 
+	void SetFingerprinting (Ptr<FingerprintingDatabase> database);
+
 private:
 
 	std::complex<double> ParseComplex (std::string strCmplx);
@@ -264,6 +318,7 @@ private:
 	std::map <Ptr<NetDevice>,std::map <sinrKey,SpectrumValue>> m_enbSinrMap;	//Map to all the eNBs
 //	std::map <Ptr<NetDevice>,std::map <sinrKey,float>> m_ueSinrMap;	//Map to all the UEs
 
+	Ptr<FingerprintingDatabase> m_fingerprinting;
 
 };
 

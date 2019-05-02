@@ -38,7 +38,7 @@
 #include <ns3/net-device-container.h>
 #include <ns3/random-variable-stream.h>
 #include "mmwave-phy-mac-common.h"
-#include "ns3/mmwave-beam-management.h"
+#include <ns3/mmwave-beam-management.h>
 
 
 
@@ -108,6 +108,10 @@ public:
 
 	void SetBeamSweepingVector (Ptr<NetDevice> ueDevice, Ptr<NetDevice> enbDevice);
 
+	void SetTransitoryTime (double t);
+
+	void SetFingerprintingInRt (Ptr<FingerprintingDatabase> fp);
+
 private:
 
 	Ptr<SpectrumValue> DoCalcRxPowerSpectralDensity (Ptr<const SpectrumValue> txPsd,
@@ -131,6 +135,8 @@ private:
 	double m_speed;
 	std::string m_traceFileName;
 	uint16_t m_traceIndex;
+	Ptr<FingerprintingDatabase> m_fingerprinting;
+	double m_transitory_time_seconds;//Initial time in seconds the UT will not move so TCP traffic reaches the stationary rate
 };
 
 

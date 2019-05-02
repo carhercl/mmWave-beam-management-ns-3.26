@@ -315,8 +315,8 @@ uint32_t
 MmWavePhyMacCommon::GetDlBlockSize(uint16_t frameNum, uint8_t subframeNum)
 {
 
-	uint16_t frameSubFrameNum = 10 * frameNum + subframeNum; // Get the sub-frame millisecond
 	uint16_t numRbs = 1; // Minimum size when no SS block is to be transmitted in the sf
+	uint16_t frameSubFrameNum = 10 * frameNum + subframeNum; // Get the sub-frame millisecond
 	uint16_t index = frameSubFrameNum % m_ssBurstSetPeriod;
 	// index values from 0 to 4 the current sub-frame transmits SS blocks
 	if (index < 5)
@@ -335,6 +335,7 @@ MmWavePhyMacCommon::GetDlBlockSize(uint16_t frameNum, uint8_t subframeNum)
 	    }
 	}
 	return numRbs;
+
 }
 
 void

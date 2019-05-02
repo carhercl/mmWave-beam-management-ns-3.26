@@ -1448,7 +1448,7 @@ MmWaveUePhy::GetBeamGainForCsi(Ptr<NetDevice> enb)
 //		BeamPairInfoStruct bestCandidatePair;
 	Time csiTime = Simulator::Now();
 	BeamPairs.m_csiResourceLastAllocation = csiTime;
-	for (uint8_t i = 0; i < BeamPairs.m_numBeamPairs; i++)
+	for (uint16_t i = 0; i < BeamPairs.m_numBeamPairs; i++)
 	{
 		complexVector_t beamformingTx =
 				enbBeamMng->GetBeamSweepVector(BeamPairs.m_beamPairList.at(i).m_txBeamId);
@@ -1550,7 +1550,7 @@ MmWaveUePhy::AcquaringPeriodicCsiValuesRoutine ()
 		Time analogDelayTime = MicroSeconds(2*m_beamManagement->GetBeamReportingPeriod());
 //		std::cout << "CSI update: Time = " << Simulator::Now().GetSeconds() << std::endl;
 //		NS_LOG_INFO("CSI update: Time = " << Simulator::Now().GetSeconds());
-		bool found = false;	//This flag determines whether or not the active beam pair is in the list of candidate beams
+//		bool active_beam_pair_in_list = false;	//This flag determines whether or not the active beam pair is in the list of candidate beams
 		for (unsigned pos = 0; pos < candidateBeamsInfoUpdated.m_beamPairList.size(); pos++)
 		{
 			if(candidateBeamsInfoUpdated.m_beamPairList.at(pos).m_avgSinr > sinr)
@@ -1558,10 +1558,10 @@ MmWaveUePhy::AcquaringPeriodicCsiValuesRoutine ()
 				bestCandidatePair = candidateBeamsInfoUpdated.m_beamPairList.at(pos);
 				sinr = candidateBeamsInfoUpdated.m_beamPairList.at(pos).m_avgSinr;
 			}
-			if(bestBeams.m_txBeamId == bestCandidatePair.m_txBeamId && bestBeams.m_rxBeamId == bestCandidatePair.m_rxBeamId)
-			{
-				found = true;
-			}
+//			if(bestBeams.m_txBeamId == bestCandidatePair.m_txBeamId && bestBeams.m_rxBeamId == bestCandidatePair.m_rxBeamId)
+//			{
+//				active_beam_pair_in_list = true;
+//			}
 		}
 
 		// Case of detecting a change in the best pair of beams
@@ -1571,16 +1571,24 @@ MmWaveUePhy::AcquaringPeriodicCsiValuesRoutine ()
 			bestBeams.m_txBeamId = m_bestTxBeamId;
 			bestBeams.m_rxBeamId = m_bestRxBeamId;
 			BeamPairInfoStruct reportBeamPair = bestBeams;
-			if (found == true)
+//			if (active_beam_pair_in_list == true)
 			{
 				m_bestTxBeamId = bestCandidatePair.m_txBeamId;
 				m_bestRxBeamId = bestCandidatePair.m_rxBeamId;
 				m_beamManagement->SetBestScannedEnb(bestCandidatePair);	//Needed before calling UpdateChannelMap
 				reportBeamPair = bestCandidatePair;
+//				std::cout << "[" << Simulator::Now().GetSeconds() <<"]Best beam pair update: tx=" << m_bestTxBeamId <<
+//								" rx=" << m_bestRxBeamId << " avgSinr=" << bestCandidatePair.m_avgSinr << " (CSI)" <<
+//								" beam pair in tracking list: " << active_beam_pair_in_list << std::endl;
 				std::cout << "[" << Simulator::Now().GetSeconds() <<"]Best beam pair update: tx=" << m_bestTxBeamId <<
-								" rx=" << m_bestRxBeamId << " avgSinr=" << bestCandidatePair.m_avgSinr << " (CSI)" <<
-								std::endl;
-				// Before concluding, since the best pair of beams has changed, the list of beams to monitor must change too
+							" rx=" << m_bestRxBeamId << " avgSinr=" << bestCandidatePair.m_avgSinr << " (CSI)" << std::endl;
+
+				UpdateChannelMapWithBeamPair (bestCandidatePair);
+
+				/*
+				 * Before finishing, since the best pair of beams (tx-rx) has changed, the list of beams to monitor might
+				 * have changed too (only for beam tracking strategies not using fingerprinting nor machine learning)
+				 */
 	//			BeamTrackingParams beforeCall = m_beamManagement->GetBeamsToTrack(); //TEST
 				m_beamManagement->FindBeamPairCandidates();
 	//			BeamTrackingParams afterCall = m_beamManagement->GetBeamsToTrack(); //TEST

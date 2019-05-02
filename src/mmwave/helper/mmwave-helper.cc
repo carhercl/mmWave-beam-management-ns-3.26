@@ -181,6 +181,10 @@ MmWaveHelper::DoInitialize()
 		m_raytracing->SetTraceFilePath(m_raytracingFilePath);
 		m_raytracing->SetTraceIndex(m_startTraceIndex);
 		m_raytracing->LoadTracesMod();
+		if (m_trackingListStrategy == 10)
+		{
+			m_raytracing->SetFingerprintingInRt(m_fingerprinting);
+		}
 	}
 	else if(m_channelModelType == "ns3::MmWave3gppChannel")
 	{
@@ -431,8 +435,9 @@ MmWaveHelper::InstallSingleUeDevice (Ptr<Node> n)
 	manager->SetBeamReportingPeriod(csiPeriod);
 	manager->SetRxCodebookFilePath(m_rxCodebookPath);
 	phy->SetBeamManagement (manager);
-	manager->InitializeBeamManagerUe(phyMacCommon, phy);
 	manager->SetCandidateBeamAlternative(m_trackingListStrategy, m_alpha, m_beta, m_memory);
+	manager->InitializeBeamManagerUe(phyMacCommon, phy);
+	manager->SetFingerprinting(m_fingerprinting);
 	// End of modification
 
 	device->Initialize();
@@ -602,6 +607,7 @@ MmWaveHelper::InstallSingleEnbDevice (Ptr<Node> n)
 	manager->SetTxCodebookFilePath(m_txCodebookPath);
 	phyMacCommon->SetPeriodicCsiResourcePeriodicity(csiPeriod);
 	phy->SetBeamManagement (manager);
+	manager->SetCandidateBeamAlternative(m_trackingListStrategy, m_alpha, m_beta, m_memory);
 	manager->InitializeBeamManagerEnb(phyMacCommon, phy);
 
 	// Workaround to let the scheduler interact with the beam manager to allocate resources.
@@ -1136,6 +1142,20 @@ MmWaveHelper::SetCandidateListForTrackingStrategy(uint16_t alt, uint16_t alpha, 
 	m_alpha = alpha;		// Used in Alt.3 and Alt.5 in MmWaveBeamManagement
 	m_beta = beta;			// Used in Alt.4 and Alt.5 in MmWaveBeamManagement
 	m_memory = memory;
+}
+
+void
+MmWaveHelper::SetFingerprintingMap(Ptr<FingerprintingDatabase> fp)
+{
+	m_fingerprinting = fp;
+}
+
+
+void
+MmWaveHelper::SetFingerprintingFilePath(std::string path)
+{
+	m_fingerprinting->SetFingerprintingFilePath(path);
+	m_fingerprinting->LoadFingerPrinting();
 }
 
 // End of Carlos modification

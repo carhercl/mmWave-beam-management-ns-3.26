@@ -64,6 +64,7 @@
 #include <ns3/mmwave-channel-raytracing.h>
 #include <ns3/mmwave-3gpp-channel.h>
 #include <ns3/mmwave-flex-tti-mac-scheduler.h>
+#include <ns3/mmwave-beam-management.h>
 
 namespace ns3 {
 
@@ -146,6 +147,9 @@ public:
 
 	void SetCandidateListForTrackingStrategy(uint16_t alt, uint16_t alpha, uint16_t beta, bool memory);
 
+	void SetFingerprintingMap(Ptr<FingerprintingDatabase> fp);
+
+	void SetFingerprintingFilePath(std::string path);
 	// End of modification
 
 protected:
@@ -209,7 +213,6 @@ private:
 	bool m_harqEnabled;
 	bool m_rlcAmEnabled;
 	bool m_snrTest;
-
 	Ptr<MmWaveBearerStatsCalculator> m_rlcStats;
 	Ptr<MmWaveBearerStatsCalculator> m_pdcpStats;
 	MmWaveBearerStatsConnector m_radioBearerStatsConnector;
@@ -229,6 +232,8 @@ private:
 
   	std::string m_raytracingFilePath;	//Path to raytracing file (only for raytracing channel)
   	uint16_t m_startTraceIndex;			// Starting trace index
+
+  	Ptr<FingerprintingDatabase> m_fingerprinting;
 
   	double m_txPower;	// TX power
 };

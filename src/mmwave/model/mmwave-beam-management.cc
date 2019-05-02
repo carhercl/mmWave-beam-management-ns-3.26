@@ -111,6 +111,7 @@ MmWaveBeamManagement::InitializeBeamManagerUe(Ptr<MmWavePhyMacCommon> phyMacConf
 	MmWavePhyMacCommon::SsBurstPeriods ssBurstSetperiod = phyMacConfig->GetSsBurstSetPeriod();
 	ScheduleSsSlotSetStart(ssBurstSetperiod);
 
+
 	//CSI-RS reporting period
 	m_beamReportingPeriod = phyMacConfig->GetCsiReportPeriodicity();
 	m_beamReportingEnabled = false;
@@ -284,6 +285,81 @@ MmWaveBeamManagement::AddEnbSinr (Ptr<NetDevice> enbNetDevice, uint16_t enbBeamI
 
 }
 
+
+void
+MmWaveBeamManagement::Alt0BeamTrackingList()
+{
+	for (std::map< Ptr<NetDevice>, std::map <sinrKey,SpectrumValue>>::iterator it1 = m_enbSinrMap.begin();
+				it1 != m_enbSinrMap.end();
+				++it1)
+	{
+		Ptr<NetDevice> pDevice = it1->first;
+		std::vector<BeamPairInfoStruct> candidateBeamPairs;
+		uint16_t numBeamPairs = 0;
+		uint16_t tx_id, rx_id;
+		for (rx_id = 0; rx_id < 16; rx_id++)
+		{
+			for (tx_id = 0; tx_id < 64; tx_id++)
+			{
+				// Fill beam pair information
+				sinrKey beam_pair = std::make_pair(tx_id,rx_id);
+				BeamPairInfoStruct beamPair;
+				std::map<sinrKey,SpectrumValue>::iterator it2 = it1->second.find(beam_pair);
+				SpectrumValue sv;
+				if (it2 != it1->second.end())
+				{
+					sv = it2->second;
+					int nbands = it2->second.GetSpectrumModel ()->GetNumBands ();
+					beamPair.m_avgSinr = Sum(sv)/nbands;
+				}
+				else
+				{
+					beamPair.m_avgSinr = 0;
+					beamPair.m_sinrPsd = sv;
+				}
+				beamPair.m_targetNetDevice = it1->first;
+				beamPair.m_txBeamId = tx_id;
+				beamPair.m_rxBeamId = rx_id;
+
+				// The candidate beam pairs are stored in descending order of SINR.
+				// If the list of candidate beam pairs is empty or it is not in the sinr map, add the struct to the list directly.
+				if(candidateBeamPairs.empty() || beamPair.m_avgSinr == 0)
+				{
+					candidateBeamPairs.push_back(beamPair);
+				}
+				// In case the list of candidate beam pairs is not empty, add the new node in the right position of the list
+				else
+				{
+					bool iterate = true;
+					std::vector<BeamPairInfoStruct>::iterator itV = candidateBeamPairs.begin();
+					while (iterate==true && itV != candidateBeamPairs.end())
+					{
+						if (itV->m_avgSinr < beamPair.m_avgSinr)
+						{
+							// insertion happens in the position following itV
+							iterate = false;	// Stop iteration
+						}
+						++itV;	// Increase list iterator
+					}
+					candidateBeamPairs.insert(itV,beamPair);
+				}
+				numBeamPairs++;
+			}
+		}
+
+		//to map:
+		BeamTrackingParams trackingParamStruct;
+		trackingParamStruct.m_beamPairList = candidateBeamPairs;
+		trackingParamStruct.m_numBeamPairs = candidateBeamPairs.size();
+		trackingParamStruct.csiReportPeriod = static_cast<MmWavePhyMacCommon::CsiReportingPeriod>(m_beamReportingPeriod);
+		trackingParamStruct.m_csiResourceLastAllocation = Simulator::Now();
+
+		UpdateBeamTrackingInfo(pDevice,trackingParamStruct);
+
+	}
+}
+
+
 /*
  * Alt1. Beam tracking strategy 1: List of candidate beams is created out of top N best SINR.
  * N value is class member m_maxNumBeamPairCandidates.
@@ -303,7 +379,7 @@ MmWaveBeamManagement::FindBeamPairCandidatesSinr ()
 
 		// Internal SINR values to control the size of the candidate beam vector.
 		double minSinr=0;
-		uint8_t numBeamPairs = 0;
+		uint16_t numBeamPairs = 0;
 		//double maxSinr=0;
 
 		for (std::map <sinrKey,SpectrumValue>::iterator it2 = it1->second.begin();
@@ -342,13 +418,14 @@ MmWaveBeamManagement::FindBeamPairCandidatesSinr ()
 				{
 					if (itV->m_avgSinr < avgSinr)
 					{
-						// insertion happens in the position following itV
-						candidateBeamPairs.insert(itV,beamPair);
-						numBeamPairs++;
 						iterate = false;	// Stop iteration
 					}
 					++itV;	// Increase list iterator
 				}
+				// insertion happens in the position following itV
+				candidateBeamPairs.insert(itV,beamPair);
+				numBeamPairs++;
+
 				// Only get best m_numMaxCandidateBeams pair of beams
 				if(candidateBeamPairs.size() > m_maxNumBeamPairCandidates)
 				{
@@ -770,6 +847,44 @@ MmWaveBeamManagement::Alt5BeamTrackingList (uint16_t beta, uint16_t alpha)
 	}
 }
 
+
+void
+MmWaveBeamManagement::FingerPrinting_1()
+{
+	for (std::map< Ptr<NetDevice>, std::map <sinrKey,SpectrumValue>>::iterator it1 = m_enbSinrMap.begin();
+					it1 != m_enbSinrMap.end();
+					++it1)
+	{
+		Ptr<NetDevice> pDevice = it1->first;
+		int nbands = it1->second.begin()->second.GetSpectrumModel()->GetNumBands();
+		BeamTrackingParams beamPairList = m_fingerprinting->GetBeamTrackingPairsCurrentIndex();
+		for (uint16_t n = 0; n < beamPairList.m_numBeamPairs; n++)
+		{
+			beamPairList.m_beamPairList.at(n).m_targetNetDevice = pDevice;
+			uint16_t tx_beam = beamPairList.m_beamPairList.at(n).m_txBeamId;
+			uint16_t rx_beam = beamPairList.m_beamPairList.at(n).m_rxBeamId;
+			std::map <sinrKey,SpectrumValue>::iterator it2 = it1->second.find(std::make_pair(tx_beam,rx_beam));
+			if(it2 != it1->second.end())	// Check whether SINR info is already available in the map
+			{
+				beamPairList.m_beamPairList.at(n).m_avgSinr = Sum(it2->second)/nbands;
+				beamPairList.m_beamPairList.at(n).m_sinrPsd = it2->second;
+			}
+			else
+			{
+				//No SINR value in the map. Just populating beam ids
+				beamPairList.m_beamPairList.at(n).m_avgSinr = -1;
+				beamPairList.m_beamPairList.at(n).m_sinrPsd = 0;
+			}
+		}
+		beamPairList.csiReportPeriod = static_cast<MmWavePhyMacCommon::CsiReportingPeriod>(m_beamReportingPeriod);;
+
+		// To map
+		UpdateBeamTrackingInfo(pDevice,beamPairList);
+	}
+
+}
+
+
 uint16_t
 MmWaveBeamManagement::GetCurrentNumBeamPairCandidates()
 {
@@ -806,6 +921,9 @@ MmWaveBeamManagement::FindBeamPairCandidates()
 
 	switch (m_beamCandidateListStrategy)
 	{
+	case 0:
+		Alt0BeamTrackingList();
+		break;
 	case 1:
 		FindBeamPairCandidatesSinr();
 		break;
@@ -820,6 +938,9 @@ MmWaveBeamManagement::FindBeamPairCandidates()
 		break;
 	case 5:
 		Alt5BeamTrackingList(m_beta,m_alpha);
+		break;
+	case 10:
+		FingerPrinting_1();
 		break;
 	default:
 		break;
@@ -1250,12 +1371,8 @@ MmWaveBeamManagement::SetCandidateBeamAlternative(uint16_t alt, uint16_t alpha, 
 	m_beamCandidateListStrategy = alt;
 	m_alpha = alpha;
 	m_memorySs = memory;
-	if (alt < 0 || alt > 5)
-	{
-		std::cout << "Unrecognized beam tracking list strategy option " << alt << ". Please check." << std::endl;
-		m_beamCandidateListStrategy = 2;
-	}
-	else if (alt == 0)
+
+	if (alt == 0)
 	{
 		m_memorySs = true;
 		m_maxNumBeamPairCandidates = 1024;
@@ -1284,6 +1401,15 @@ MmWaveBeamManagement::SetCandidateBeamAlternative(uint16_t alt, uint16_t alpha, 
 		m_alpha = 2;
 		m_beta = 4;
 	}
+	else if (alt == 10)
+	{
+		m_maxNumBeamPairCandidates = 1;
+	}
+	else
+	{
+		std::cout << "Unrecognized beam tracking list strategy option " << alt << ". Please check." << std::endl;
+		m_beamCandidateListStrategy = 2;
+	}
 }
 
 void
@@ -1309,6 +1435,159 @@ MmWaveBeamManagement::DisableSsbMeasMemory ()
 {
 	m_memorySs = false;
 }
+
+void
+MmWaveBeamManagement::SetFingerprinting (Ptr<FingerprintingDatabase> fp)
+{
+	m_fingerprinting = fp;
+}
+
+
+
+FingerprintingDatabase::FingerprintingDatabase()
+{
+	m_fingerprintingFilePath = "";
+	m_current_ue_index = 0;
+	m_fingerPrintingMap.clear();
+}
+
+FingerprintingDatabase::~FingerprintingDatabase()
+{
+	m_fingerprintingFilePath = "";
+	m_current_ue_index = 0;
+	m_fingerPrintingMap.clear();
+}
+
+
+TypeId
+FingerprintingDatabase::GetTypeId (void)
+{
+	static TypeId tid = TypeId ("ns3::FingerprintingDatabase")
+		.SetParent<Object> ()
+	;
+  	return tid;
+}
+
+
+void
+FingerprintingDatabase::LoadFingerPrinting ()
+{
+	NS_ASSERT_MSG(m_fingerprintingFilePath.size() > 0, "No default fingerprinting file path provided: " << m_fingerprintingFilePath.size());
+	LoadFingerPrinting(m_fingerprintingFilePath);
+}
+
+
+void
+FingerprintingDatabase::LoadFingerPrinting (std::string inputFilename)
+{
+	//std::string filename = "src/mmwave/model/BeamFormingMatrix/TxAntenna.txt";
+	NS_LOG_FUNCTION (this << "Fingerprinting file: " << inputFilename);
+	std::ifstream singlefile;
+	singlefile.open (inputFilename.c_str (), std::ifstream::in);
+
+	NS_LOG_INFO (this << " Fingerprinting File: " << inputFilename);
+	NS_ASSERT_MSG(singlefile.good (), inputFilename << " file not found");
+
+	std::string line;
+	std::string token;
+	uint16_t counter = 0;
+	coordinate_t meas_point;
+	BeamTrackingParams bestBeamPairsInfo;
+	doubleVector_t tx_beam_vector, rx_beam_vector;
+	uint16_t numBeamPairs = 0;
+	while( std::getline(singlefile, line) ) //Parse each line of the file
+	{
+		if(counter == 4)
+		{
+			// Populate beam info
+			bestBeamPairsInfo = FillBeamTrackingParamsFields(numBeamPairs,tx_beam_vector,rx_beam_vector);
+			// Add bestBeamPairsInfo to fingerprinting map.
+			m_fingerPrintingMap.insert(std::pair<coordinate_t,BeamTrackingParams>(meas_point,bestBeamPairsInfo));
+			counter = 0;
+		}
+		doubleVector_t path;
+		std::istringstream stream(line);
+		while( getline(stream,token,',') ) //Parse each comma separated string in a line
+		{
+			double sigma = 0.00;
+			std::stringstream stream( token );
+			stream>>sigma;
+			path.push_back(sigma);
+		}
+
+		switch (counter)
+		{
+		case 0:
+			NS_ASSERT_MSG(path.size() == 2, "Wrong number of coordinates in the fingerprinting file. (It should be 2)");
+			meas_point = std::make_pair(path.at(0),path.at(1));
+			break;
+		case 1:
+			numBeamPairs = (uint16_t)path.at(0);
+			break;
+		case 2:
+			tx_beam_vector = path;
+			break;
+		case 3:
+			rx_beam_vector = path;
+			break;
+		default:
+			NS_FATAL_ERROR("Never call this");
+			break;
+		}
+		counter++;
+	}
+
+}
+
+
+BeamTrackingParams
+FingerprintingDatabase::FillBeamTrackingParamsFields(uint16_t num_pairs, std::vector<double> tx_beams_ids, std::vector<double> rx_beams_ids)
+{
+	BeamTrackingParams output_params;
+	output_params.m_numBeamPairs = num_pairs;
+	for (uint16_t n = 0; n < num_pairs; n++)
+	{
+		BeamPairInfoStruct current_pair;
+		current_pair.m_txBeamId = (uint16_t)tx_beams_ids.at(n);
+		current_pair.m_rxBeamId = (uint16_t)rx_beams_ids.at(n);
+		current_pair.m_avgSinr = -1;
+		current_pair.m_targetNetDevice = NULL;
+		output_params.m_beamPairList.push_back(current_pair);
+	}
+
+	return output_params;
+}
+
+
+void
+FingerprintingDatabase::SetCurrentPathIndex (uint16_t id)
+{
+	m_current_ue_index = id;
+}
+
+
+uint16_t
+FingerprintingDatabase::GetCurrentPathIndex ()
+{
+	return m_current_ue_index;
+}
+
+
+BeamTrackingParams
+FingerprintingDatabase::GetBeamTrackingPairsCurrentIndex ()
+{
+	BeamTrackingParams params;
+	std::map <coordinate_t,BeamTrackingParams>::iterator it = m_fingerPrintingMap.begin();
+	uint16_t count = 0;
+	while (count < m_current_ue_index && it != m_fingerPrintingMap.end())
+	{
+		++it;
+		count++;
+	}
+	params = it->second;
+	return params;
+}
+
 
 }
 

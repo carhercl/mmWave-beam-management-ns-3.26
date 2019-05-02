@@ -676,12 +676,12 @@ MmWaveFlexTtiMacScheduler::DoSchedTriggerReq (const struct MmWaveMacSchedSapProv
 	m_phyMacConfig->SetDlCtrlSymbols(numSym);	//The number of symbols is flexible and the PHY needs the right value
 	SlotAllocInfo dlCtrlSlot (0, SlotAllocInfo::DL, SlotAllocInfo::CTRL, SlotAllocInfo::DIGITAL, 0);
 
-	//TODO: Add resources for periodic CSI-RS if it is the right time (subframe) to do so
+	// Add resources for periodic CSI-RS if it is the right time (subframe) to do so
 	Time margin = MilliSeconds(1.0);
 	std::map <Ptr<NetDevice>,BeamTrackingParams> uesToAllocate = m_beamManager->GetDevicesMapToExpireTimer(margin);
 	if (!uesToAllocate.empty() && m_phyMacConfig->GetPeriodicCsiResourceAllocationCondition() == true)
 	{
-		//FIXME: simplification here. The scheduler should allocate the necessary RBs, not all the RBs in a symbol (time).
+		//FIXME: simplification. The scheduler should allocate the necessary RBs, not all the RBs in a symbol (time).
 //		numSym += uesToAllocate.size() * 20; // Assume five symbol per UE, independently of the number of resources used.
 //		numSym += uesToAllocate.size(); // * m_beamManager->GetMaxNumBeamPairCandidates();
 		uint16_t num_csi_resources = m_beamManager->GetCurrentNumBeamPairCandidates();
