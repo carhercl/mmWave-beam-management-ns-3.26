@@ -1013,7 +1013,7 @@ private:
 	uint32_t m_slotsPerSubframe;
 	uint32_t m_subframesPerFrame;
 	uint32_t m_numRefSymbols;
-  uint32_t m_numRbPerRbg;
+    uint32_t m_numRbPerRbg;
 
 	uint32_t m_numSubCarriersPerChunk;
 	uint32_t m_chunksPerRb;

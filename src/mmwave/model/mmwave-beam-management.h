@@ -96,10 +96,15 @@ public:
 
 	BeamTrackingParams GetBeamTrackingPairsCurrentIndex ();
 
+	BeamTrackingParams GetBeamTrackingPairsIndex(uint16_t index);
+
+	bool IsFpDatabaseInitialized ();
+
 
 private:
 
 	std::map <coordinate_t,BeamTrackingParams> m_fingerPrintingMap;
+	std::vector <BeamTrackingParams> m_fingerPrintingVector;	// Similar to vector but without position coordinates
 	uint16_t m_current_ue_index;
 
 };
@@ -274,6 +279,8 @@ public:
 
 //	void SetCandidateBeamAlternative(uint16_t alt, uint16_t alpha);
 	void SetCandidateBeamAlternative(uint16_t alt, uint16_t alpha, uint16_t beta, bool memory);
+
+	uint16_t GetCandidateBeamAlternative();
 
 	void EnableSsbMeasMemory ();
 

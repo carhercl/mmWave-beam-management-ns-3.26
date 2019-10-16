@@ -298,8 +298,7 @@ MmWaveFlexTtiMacScheduler::ConfigureCommonParameters (Ptr<MmWavePhyMacCommon> co
 	m_harqTimeout = m_phyMacConfig->GetHarqTimeout ();
 	m_numDataSymbols = m_phyMacConfig->GetSymbolsPerSubframe () -
 			m_phyMacConfig->GetDlCtrlSymbols () - m_phyMacConfig->GetUlCtrlSymbols ();
-	NS_ASSERT_MSG (m_phyMacConfig->GetNumRb () == 1, \
-	               "System must be configured with numRb=1 for TDMA mode");
+	//NS_ASSERT_MSG (m_phyMacConfig->GetNumRb () == 1, "System must be configured with numRb=1 for TDMA mode");
 
 	for (unsigned i = 0; i < m_phyMacConfig->GetUlSchedDelay(); i++)
 	{
@@ -672,23 +671,32 @@ MmWaveFlexTtiMacScheduler::DoSchedTriggerReq (const struct MmWaveMacSchedSapProv
 	              << " UL frame " << (unsigned)ulSfn.m_frameNum << " subframe " << (unsigned)ulSfn.m_sfNum);
 
 	// add slot for DL control
-	uint32_t numSym = m_phyMacConfig->GetDlBlockSize(frameNum,sfNum);
+	uint32_t numSym = 1;	//Minimum OFDM symbol for control (simulation stops if numSym = 0)
+	uint16_t tracking_alternative = m_beamManager->GetCandidateBeamAlternative();
+	// tracking_alternative = 0 for baseline case (no overhead)
+	if (tracking_alternative != 0)
+	{
+		// Equivalent symbols occupied with SSB
+		numSym = m_phyMacConfig->GetDlBlockSize(frameNum,sfNum);
+		// Add resources for periodic CSI-RS if it is the right time (subframe) to do so
+		// Equivalent symbols occupied with CSI-RS
+		Time margin = MilliSeconds(1.0);
+		std::map <Ptr<NetDevice>,BeamTrackingParams> uesToAllocate = m_beamManager->GetDevicesMapToExpireTimer(margin);
+		if (!uesToAllocate.empty() && m_phyMacConfig->GetPeriodicCsiResourceAllocationCondition() == true)
+		{
+			//FIXME: simplification. The scheduler should allocate the necessary RBs, not all the RBs in a symbol (time).
+	//		numSym += uesToAllocate.size() * 20; // Assume five symbol per UE, independently of the number of resources used.
+	//		numSym += uesToAllocate.size(); // * m_beamManager->GetMaxNumBeamPairCandidates();
+			uint16_t num_csi_resources = m_beamManager->GetCurrentNumBeamPairCandidates();
+			numSym += ceil((float)num_csi_resources*1*22.92/275); //
+			// Ask manager to update the last reporting timer (increase by the reporting period)
+			m_beamManager->IncreaseBeamReportingTimers(uesToAllocate);
+		}
+	}
+
+
 	m_phyMacConfig->SetDlCtrlSymbols(numSym);	//The number of symbols is flexible and the PHY needs the right value
 	SlotAllocInfo dlCtrlSlot (0, SlotAllocInfo::DL, SlotAllocInfo::CTRL, SlotAllocInfo::DIGITAL, 0);
-
-	// Add resources for periodic CSI-RS if it is the right time (subframe) to do so
-	Time margin = MilliSeconds(1.0);
-	std::map <Ptr<NetDevice>,BeamTrackingParams> uesToAllocate = m_beamManager->GetDevicesMapToExpireTimer(margin);
-	if (!uesToAllocate.empty() && m_phyMacConfig->GetPeriodicCsiResourceAllocationCondition() == true)
-	{
-		//FIXME: simplification. The scheduler should allocate the necessary RBs, not all the RBs in a symbol (time).
-//		numSym += uesToAllocate.size() * 20; // Assume five symbol per UE, independently of the number of resources used.
-//		numSym += uesToAllocate.size(); // * m_beamManager->GetMaxNumBeamPairCandidates();
-		uint16_t num_csi_resources = m_beamManager->GetCurrentNumBeamPairCandidates();
-		numSym += ceil(num_csi_resources/16); // FIXME: Assume 16 CSI resources occupy 1 whole OFDM symbol. Large number of CSI resources will occupy all symbols
-		// Ask manager to update the last reporting timer (increase by the reporting period)
-		m_beamManager->IncreaseBeamReportingTimers(uesToAllocate);
-	}
 
 	dlCtrlSlot.m_dci.m_numSym = numSym; //4;
 	dlCtrlSlot.m_dci.m_symStart = 0;

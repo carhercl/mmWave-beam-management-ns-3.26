@@ -408,7 +408,12 @@ MmWaveEnbPhy::StartSlot (void)
 
 		// TX control period
 //		slotPeriod = NanoSeconds (1000.0*m_phyMacConfig->GetSymbolPeriod ()*m_phyMacConfig->GetDlCtrlSymbols());
-		uint32_t DlCtrlSymbols = m_phyMacConfig->GetDlCtrlSymbols(m_frameNum,m_sfNum);
+
+		uint32_t DlCtrlSymbols = 1;
+		if(m_beamManagement->GetCandidateBeamAlternative() != 0)
+		{
+			m_phyMacConfig->GetDlCtrlSymbols(m_frameNum,m_sfNum);
+		}
 		slotPeriod = NanoSeconds (1000.0*m_phyMacConfig->GetSymbolPeriod ()*DlCtrlSymbols);
 		NS_LOG_DEBUG ("ENB TXing DL CTRL frame " << m_frameNum << " subframe " << (unsigned)m_sfNum << " symbols "
 		              << (unsigned)currSlot.m_dci.m_symStart << "-" << (unsigned)(currSlot.m_dci.m_symStart+currSlot.m_dci.m_numSym-1)

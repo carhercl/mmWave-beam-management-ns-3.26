@@ -145,6 +145,8 @@ public:
 
 	void SetTxPower(double powerDb);
 
+	void SetMaxNumBeamPairsList(uint16_t num_beams);
+
 	void SetCandidateListForTrackingStrategy(uint16_t alt, uint16_t alpha, uint16_t beta, bool memory);
 
 	void SetFingerprintingMap(Ptr<FingerprintingDatabase> fp);
@@ -226,6 +228,7 @@ private:
 
   	// Parameters to configure the list of candidate beams to be used for beam tracking.
   	uint8_t m_trackingListStrategy;
+  	uint16_t m_numMaxBeamPairsToMonitor;	// Max number of beam pairs to monitor
   	bool m_memory;	// If all SSB beam measurement combinations must be stored
   	uint16_t m_alpha;	// Only used in Alt.3 and Alt.5 in MmWaveBeamManagement
   	uint16_t m_beta;	// Only used in Alt.4 and Alt.5 in MmWaveBeamManagement

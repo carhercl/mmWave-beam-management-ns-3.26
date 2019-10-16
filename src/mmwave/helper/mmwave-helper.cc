@@ -181,10 +181,11 @@ MmWaveHelper::DoInitialize()
 		m_raytracing->SetTraceFilePath(m_raytracingFilePath);
 		m_raytracing->SetTraceIndex(m_startTraceIndex);
 		m_raytracing->LoadTracesMod();
-		if (m_trackingListStrategy == 10)
-		{
-			m_raytracing->SetFingerprintingInRt(m_fingerprinting);
-		}
+//		if (m_trackingListStrategy == 10)
+//		{
+//			m_raytracing->SetFingerprintingInRt(m_fingerprinting);
+//		}
+		m_raytracing->SetFingerprintingInRt(m_fingerprinting);
 	}
 	else if(m_channelModelType == "ns3::MmWave3gppChannel")
 	{
@@ -435,6 +436,7 @@ MmWaveHelper::InstallSingleUeDevice (Ptr<Node> n)
 	manager->SetBeamReportingPeriod(csiPeriod);
 	manager->SetRxCodebookFilePath(m_rxCodebookPath);
 	phy->SetBeamManagement (manager);
+	manager->SetMaxNumBeamPairCandidates(m_numMaxBeamPairsToMonitor);
 	manager->SetCandidateBeamAlternative(m_trackingListStrategy, m_alpha, m_beta, m_memory);
 	manager->InitializeBeamManagerUe(phyMacCommon, phy);
 	manager->SetFingerprinting(m_fingerprinting);
@@ -607,6 +609,7 @@ MmWaveHelper::InstallSingleEnbDevice (Ptr<Node> n)
 	manager->SetTxCodebookFilePath(m_txCodebookPath);
 	phyMacCommon->SetPeriodicCsiResourcePeriodicity(csiPeriod);
 	phy->SetBeamManagement (manager);
+	manager->SetMaxNumBeamPairCandidates(m_numMaxBeamPairsToMonitor);
 	manager->SetCandidateBeamAlternative(m_trackingListStrategy, m_alpha, m_beta, m_memory);
 	manager->InitializeBeamManagerEnb(phyMacCommon, phy);
 
@@ -1135,6 +1138,13 @@ MmWaveHelper::SetTxPower(double powerDb)
 	m_txPower = powerDb;
 }
 
+
+void
+MmWaveHelper::SetMaxNumBeamPairsList(uint16_t num_beams)
+	{
+		m_numMaxBeamPairsToMonitor = num_beams;
+	}
+
 void
 MmWaveHelper::SetCandidateListForTrackingStrategy(uint16_t alt, uint16_t alpha, uint16_t beta, bool memory)
 {
@@ -1155,7 +1165,10 @@ void
 MmWaveHelper::SetFingerprintingFilePath(std::string path)
 {
 	m_fingerprinting->SetFingerprintingFilePath(path);
-	m_fingerprinting->LoadFingerPrinting();
+	if (path.empty() == false)
+	{
+		m_fingerprinting->LoadFingerPrinting();
+	}
 }
 
 // End of Carlos modification

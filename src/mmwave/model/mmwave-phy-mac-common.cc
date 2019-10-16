@@ -54,7 +54,8 @@ MmWavePhyMacCommon::GetTypeId (void)
 						   MakeUintegerChecker<uint32_t> ())
 			.AddAttribute ("SymbolsPerSubframe",
 							 "OFDM symbols per subframe",
-							 UintegerValue (112),	// SCS = 120 KHz //UintegerValue (24),
+							 UintegerValue (112),	// SCS = 120 KHz
+							 //UintegerValue (24),
 							 MakeUintegerAccessor (&MmWavePhyMacCommon::m_symbolsPerSubframe),
 							 MakeUintegerChecker<uint32_t> ())
 			 .AddAttribute ("SubframePeriod",
@@ -69,12 +70,14 @@ MmWavePhyMacCommon::GetTypeId (void)
 							 MakeUintegerChecker<uint32_t> ())
 			.AddAttribute ("SymbolPeriod",
 						   "Symbol period in microseconds",
-						   DoubleValue (8.33),	//For SCS of 120 KHz	//DoubleValue (4.16),
+						   DoubleValue (8.33),	//For SCS of 120 KHz
+						   //DoubleValue (4.16),
 						   MakeDoubleAccessor (&MmWavePhyMacCommon::m_symbolPeriod),
 						   MakeDoubleChecker<double> ())
 			.AddAttribute ("SlotsPerSubframe",
 						   "Number of slots in one subframe",
-						   UintegerValue (8),	// SCS = 120 KHz //UintegerValue (8),
+						   UintegerValue (8),	// SCS = 120 KHz
+						   //UintegerValue (8),
 						   MakeUintegerAccessor (&MmWavePhyMacCommon::m_slotsPerSubframe),
 						   MakeUintegerChecker<uint32_t> ())
 			.AddAttribute ("SubframePerFrame",
@@ -84,17 +87,20 @@ MmWavePhyMacCommon::GetTypeId (void)
 						   MakeUintegerChecker<uint32_t> ())
 			.AddAttribute ("SubcarriersPerChunk",
 						   "Number of sub-carriers per chunk",
-						   UintegerValue (48),
+						   UintegerValue (12),
+						   //UintegerValue (48),
 						   MakeUintegerAccessor (&MmWavePhyMacCommon::m_numSubCarriersPerChunk),
 						   MakeUintegerChecker<uint32_t> ())
 			.AddAttribute ("ChunkPerRB",
 						   "Number of chunks comprising a resource block",
-						   UintegerValue (72),
+						   UintegerValue (275), // SCS=120kHz
+						   //UintegerValue (72),
 						   MakeUintegerAccessor (&MmWavePhyMacCommon::m_chunksPerRb),
 						   MakeUintegerChecker<uint32_t> ())
 			.AddAttribute ("ChunkWidth",
 						   "Width of each chunk in Hz",
-						   DoubleValue (13.889e6),
+						   DoubleValue (12*120e3), //SCS=120kHz
+						   //DoubleValue (13.889e6),
 						   MakeDoubleAccessor (&MmWavePhyMacCommon::m_chunkWidth),
 						   MakeDoubleChecker<double> ())
 			.AddAttribute ("ResourceBlockNum",
@@ -163,18 +169,18 @@ MmWavePhyMacCommon::MmWavePhyMacCommon ()
   m_symbolsPerSubframe (112),	// 24
   m_subframePeriod (1000.0),
   m_ctrlSymbols (1),
-  m_dlCtrlSymbols (64),	// 4 OFDM symbols for SS block. Former value was 1
+  m_dlCtrlSymbols (6),	// 4 OFDM symbols for SS block. Former value was 1
   m_ulCtrlSymbols (1),
   m_slotsPerSubframe (8),
   m_subframesPerFrame (10),
   m_numRefSymbols (6),
 	m_numRbPerRbg (1),
-  m_numSubCarriersPerChunk (48),
-  m_chunksPerRb (72),
+  m_numSubCarriersPerChunk (1), // 48
+  m_chunksPerRb (12), //72
   m_numRefScPerRb (6),
   m_numRefScPerSym (864),
-  m_chunkWidth (14e6),
-  m_numRb (1),
+  m_chunkWidth (120e3), //14e6
+  m_numRb (275), //1
   m_numHarqProcess (20),
   m_harqTimeout (20),
   m_centerFrequency (28e9),
@@ -192,13 +198,14 @@ MmWavePhyMacCommon::MmWavePhyMacCommon ()
 	m_currentSsBlockSlotId (0),
 	m_maxSsBlockSlotId (4*5),
 	m_ssBurstSetLength (ms5),
-	m_ssBurstSetPeriod (ms20),
+	m_ssBurstSetPeriod (ms5),
+	m_periodicCsiResources(false),
 	m_Xp (ms10),
 	m_csiPeriodicResourceAllocationSlots (slot80),
 	m_numRbsForPeriodicCsiResource (52)
 
 {
-	NS_LOG_INFO ("Initialized MmWavePhyMacCommon");
+	std::cout << "Initialized MmWavePhyMacCommon" << std::endl;
 }
 
 // Carlos modification
@@ -315,7 +322,7 @@ uint32_t
 MmWavePhyMacCommon::GetDlBlockSize(uint16_t frameNum, uint8_t subframeNum)
 {
 
-	uint16_t numRbs = 1; // Minimum size when no SS block is to be transmitted in the sf
+	uint16_t numSym = 1; // Minimum size when no SS block is to be transmitted in the sf
 	uint16_t frameSubFrameNum = 10 * frameNum + subframeNum; // Get the sub-frame millisecond
 	uint16_t index = frameSubFrameNum % m_ssBurstSetPeriod;
 	// index values from 0 to 4 the current sub-frame transmits SS blocks
@@ -324,17 +331,20 @@ MmWavePhyMacCommon::GetDlBlockSize(uint16_t frameNum, uint8_t subframeNum)
 	    uint16_t numSymbolsPerSf= (uint16_t)m_symbolsPerSubframe;
 	    uint16_t min=index*numSymbolsPerSf;
 	    uint16_t max=(index+1)*numSymbolsPerSf -1;
-	    numRbs = 0;
+	    uint16_t numRbs = 0;
 		for (std::vector<uint16_t>::iterator it = m_ssBurstPattern.begin();
 				it != m_ssBurstPattern.end(); it++)
 	    {
 	        if (*it >= min && *it < max)
 	        {
-	            numRbs += 4;
+	            numRbs += 4*20;	// An SSB occupies 20 RBs in frequency domain and 4 OFDM symbols in time domain
 	        }
 	    }
+		// One component carrier (CC) has approximately 400 MHz BW, which are 275 RBs
+		numSym += ceil((float)numRbs / m_chunksPerRb);	//FIXME: an approximation. Signaling overhead is fit to whole symbols.
+
 	}
-	return numRbs;
+	return numSym;
 
 }
 

@@ -476,6 +476,10 @@ MmWaveChannelRaytracing::CalSnr (
 	}
 	uint16_t update_factor = 10;
 	uint16_t traceIndex = (m_startDistance+(corrected_time*m_speed*update_factor));
+	if (m_fingerprinting->IsFpDatabaseInitialized() == true)
+	{
+		m_fingerprinting->SetCurrentPathIndex(traceIndex);
+	}
 	static uint16_t currentIndex = m_startDistance;
 	if(traceIndex > g_numPdps)
 	{
@@ -485,7 +489,6 @@ MmWaveChannelRaytracing::CalSnr (
 	if(time > m_transitory_time_seconds && traceIndex != currentIndex)
 	{
 		currentIndex = traceIndex;
-		m_fingerprinting->SetCurrentPathIndex(traceIndex);
 		m_channelMatrixMap.clear();
 	}
 	//NS_LOG_UNCOND (traceIndex);
@@ -706,17 +709,19 @@ MmWaveChannelRaytracing::DoCalcRxPowerSpectralDensity (Ptr<const SpectrumValue> 
 	}
 	uint16_t update_factor = 10;
 	uint16_t traceIndex = (m_startDistance+(corrected_time*m_speed*update_factor));
+	if (m_fingerprinting->IsFpDatabaseInitialized() == true)
+	{
+		m_fingerprinting->SetCurrentPathIndex(traceIndex);
+	}
 
 	static uint16_t currentIndex = m_startDistance;
 	if(traceIndex > g_numPdps)
 	{
 		NS_FATAL_ERROR ("The maximum trace index is " << g_numPdps);
 	}
-
 	if(time > m_transitory_time_seconds && traceIndex != currentIndex)
 	{
 		currentIndex = traceIndex;
-		m_fingerprinting->SetCurrentPathIndex(traceIndex);
 		m_channelMatrixMap.clear();
 	}
 //	NS_LOG_UNCOND (traceIndex);

@@ -543,7 +543,11 @@ MmWaveUePhy::StartSlot ()
 
 	if (m_slotNum == 0)  // reserved DL control
 	{
-		uint32_t DlCtrlSymbols = m_phyMacConfig->GetDlCtrlSymbols (m_frameNum, m_sfNum);
+		uint32_t DlCtrlSymbols = 1;
+		if(m_beamManagement->GetCandidateBeamAlternative() != 0)
+		{
+			m_phyMacConfig->GetDlCtrlSymbols(m_frameNum,m_sfNum);
+		}
 		slotPeriod = NanoSeconds (1000.0 * m_phyMacConfig->GetSymbolPeriod () * DlCtrlSymbols);
 		NS_LOG_DEBUG ("UE" << m_rnti << " RXing DL CTRL frame " << m_frameNum << " subframe " << (unsigned)m_sfNum << " symbols "
 		              << (unsigned)currSlot.m_dci.m_symStart << "-" << (unsigned)(currSlot.m_dci.m_symStart+currSlot.m_dci.m_numSym-1) <<
@@ -721,7 +725,7 @@ MmWaveUePhy::StartSsBlockSlot()
 			break;
 		// Analog case
 		case Analog:
-			// Get the gain of the current beam
+			// Get the gain of the current UE beam
 			GetBeamGain();
 
 			// Call to update beam sweeping beam id if it is time to do so
@@ -1411,8 +1415,9 @@ MmWaveUePhy::GetBeamGainForCsi()
 
 
 /*
- * This method perform the beam measurements indicated in the list of beams to monitor. Calling this function implies
- * updating the entries in the channel information map of the measured pair of beams.
+ * This method performs the beam measurements indicated in the list of beams to monitor. Calling this function implies
+ * updating the SINR entries of the structure containing the monitored pair of beams (does not update the channel map
+ * and should be done later).
  */
 void
 MmWaveUePhy::GetBeamGainForCsi(Ptr<NetDevice> enb)
@@ -1424,7 +1429,7 @@ MmWaveUePhy::GetBeamGainForCsi(Ptr<NetDevice> enb)
 	}
 
 	BeamTrackingParams BeamPairs = m_beamManagement->GetBeamsToTrackForEnb(enb);
-	if (BeamPairs.m_numBeamPairs == 0)	// When simulating in PC cluster, this call interrupts the simulation.
+	if (BeamPairs.m_numBeamPairs == 0)	// When simulating in simulation cluster, this call interrupts the simulation.
 	{
 		return;
 	}
@@ -1448,6 +1453,9 @@ MmWaveUePhy::GetBeamGainForCsi(Ptr<NetDevice> enb)
 //		BeamPairInfoStruct bestCandidatePair;
 	Time csiTime = Simulator::Now();
 	BeamPairs.m_csiResourceLastAllocation = csiTime;
+
+	m_beamManagement->ClearAllSinrMapEntries(); //FIXME: This is to test memoryless tracking
+
 	for (uint16_t i = 0; i < BeamPairs.m_numBeamPairs; i++)
 	{
 		complexVector_t beamformingTx =
@@ -1473,10 +1481,10 @@ MmWaveUePhy::GetBeamGainForCsi(Ptr<NetDevice> enb)
 			std::cout << "ERROR" << std::endl;
 		}
 		BeamPairs.m_beamPairList.at(i).m_sinrPsd = sinr;
-		uint8_t nbands = sinr.GetSpectrumModel ()->GetNumBands ();
+		uint16_t nbands = sinr.GetSpectrumModel ()->GetNumBands ();
 		BeamPairs.m_beamPairList.at(i).m_avgSinr = Sum(sinr)/nbands;
 
-		// Now add the experienced SINR to the beam management node (optional)
+		// Now add the experienced SINR to the beam management node
 		m_beamManagement->AddEnbSinr(
 				enb,
 				BeamPairs.m_beamPairList.at(i).m_txBeamId,
@@ -1521,6 +1529,8 @@ MmWaveUePhy::GetBeamGainForCsi(Ptr<NetDevice> enb)
 	// Update beam tracking information
 	m_beamManagement->UpdateBeamTrackingInfoValues(enb,BeamPairs);
 
+
+
 }
 
 
@@ -1535,82 +1545,73 @@ MmWaveUePhy::AcquaringPeriodicCsiValuesRoutine ()
 
 //		BeamTrackingParams candidateBeamsInfoBefore = m_beamManagement->GetBeamsToTrackForEnb(enb);
 
-		// Get the beam gains
+		// Get or update the beam pair SINR for the candidate beams
 		GetBeamGainForCsi(enb);
-
+		// Retrieve the list of beams with updated SINR values
 		BeamTrackingParams candidateBeamsInfoUpdated = m_beamManagement->GetBeamsToTrackForEnb(enb);
-
+		BeamPairInfoStruct activeBeamPairInfo = m_beamManagement->GetBestScannedBeamPair();
 		/*
 		 * Determine if there is a new best pair of beams. If so, update channel matrix. Analog bf has some delay
 		 */
-		BeamPairInfoStruct bestBeams = m_beamManagement->GetBestScannedBeamPair();
 		BeamPairInfoStruct bestCandidatePair;
 		double sinr = -1;
-		Architecture phyArch = GetPhyArchitecture();
 		Time analogDelayTime = MicroSeconds(2*m_beamManagement->GetBeamReportingPeriod());
-//		std::cout << "CSI update: Time = " << Simulator::Now().GetSeconds() << std::endl;
-//		NS_LOG_INFO("CSI update: Time = " << Simulator::Now().GetSeconds());
-//		bool active_beam_pair_in_list = false;	//This flag determines whether or not the active beam pair is in the list of candidate beams
-		for (unsigned pos = 0; pos < candidateBeamsInfoUpdated.m_beamPairList.size(); pos++)
+		for (uint16_t pos = 0; pos < candidateBeamsInfoUpdated.m_beamPairList.size(); pos++)
 		{
 			if(candidateBeamsInfoUpdated.m_beamPairList.at(pos).m_avgSinr > sinr)
 			{
 				bestCandidatePair = candidateBeamsInfoUpdated.m_beamPairList.at(pos);
 				sinr = candidateBeamsInfoUpdated.m_beamPairList.at(pos).m_avgSinr;
 			}
-//			if(bestBeams.m_txBeamId == bestCandidatePair.m_txBeamId && bestBeams.m_rxBeamId == bestCandidatePair.m_rxBeamId)
-//			{
-//				active_beam_pair_in_list = true;
-//			}
 		}
 
 		// Case of detecting a change in the best pair of beams
-//		if(bestBeams.m_txBeamId != bestCandidatePair.m_txBeamId || bestBeams.m_rxBeamId != bestCandidatePair.m_rxBeamId)
 		if(m_bestTxBeamId != bestCandidatePair.m_txBeamId || m_bestRxBeamId != bestCandidatePair.m_rxBeamId)
 		{
-			bestBeams.m_txBeamId = m_bestTxBeamId;
-			bestBeams.m_rxBeamId = m_bestRxBeamId;
-			BeamPairInfoStruct reportBeamPair = bestBeams;
-//			if (active_beam_pair_in_list == true)
-			{
-				m_bestTxBeamId = bestCandidatePair.m_txBeamId;
-				m_bestRxBeamId = bestCandidatePair.m_rxBeamId;
-				m_beamManagement->SetBestScannedEnb(bestCandidatePair);	//Needed before calling UpdateChannelMap
-				reportBeamPair = bestCandidatePair;
+			m_bestTxBeamId = bestCandidatePair.m_txBeamId;
+			m_bestRxBeamId = bestCandidatePair.m_rxBeamId;
+			m_beamManagement->SetBestScannedEnb(bestCandidatePair);	//Needed before calling UpdateChannelMap
 //				std::cout << "[" << Simulator::Now().GetSeconds() <<"]Best beam pair update: tx=" << m_bestTxBeamId <<
 //								" rx=" << m_bestRxBeamId << " avgSinr=" << bestCandidatePair.m_avgSinr << " (CSI)" <<
 //								" beam pair in tracking list: " << active_beam_pair_in_list << std::endl;
-				std::cout << "[" << Simulator::Now().GetSeconds() <<"]Best beam pair update: tx=" << m_bestTxBeamId <<
-							" rx=" << m_bestRxBeamId << " avgSinr=" << bestCandidatePair.m_avgSinr << " (CSI)" << std::endl;
+			std::cout << "[" << Simulator::Now().GetSeconds() <<"]Best beam pair update: tx=" << m_bestTxBeamId <<
+						" rx=" << m_bestRxBeamId << " avgSinr=" << bestCandidatePair.m_avgSinr << " (CSI)" << std::endl;
 
-				UpdateChannelMapWithBeamPair (bestCandidatePair);
+			// Update the activeBeamPairInfo
+			activeBeamPairInfo = m_beamManagement->GetBestScannedBeamPair();
 
-				/*
-				 * Before finishing, since the best pair of beams (tx-rx) has changed, the list of beams to monitor might
-				 * have changed too (only for beam tracking strategies not using fingerprinting nor machine learning)
-				 */
-	//			BeamTrackingParams beforeCall = m_beamManagement->GetBeamsToTrack(); //TEST
-				m_beamManagement->FindBeamPairCandidates();
-	//			BeamTrackingParams afterCall = m_beamManagement->GetBeamsToTrack(); //TEST
-			}
-			// UpdateChannelMap calls for changing the transmit and receive beams
-			if(phyArch == Digital)
-			{
-				UpdateChannelMapWithBeamPair(reportBeamPair);
-			}
-			// If analog we introduce some delay in the update
-			else if (phyArch == Analog || phyArch == Analog_fast)
-			{
-				//FIXME: Not 2 times the symbol period
-				Simulator::Schedule(analogDelayTime,&MmWaveUePhy::UpdateChannelMapWithBeamPair,this,reportBeamPair);
-			}
-			else
-			{
-				std::cout << "ERROR at MmWaveUePhy::AcquaringPeriodicCsiValuesRoutine(): Unsupported architecture" << std::endl;
-			}
+			UpdateChannelMapWithBeamPair (bestCandidatePair);	// Forces beam pair change
+
+			/*
+			 * Before finishing, since the best pair of beams (tx-rx) has changed, the list of beams to monitor might
+			 * have changed too (only for beam tracking strategies not using fingerprinting nor machine learning)
+			 */
+//			BeamTrackingParams beforeCall = m_beamManagement->GetBeamsToTrack(); //TEST
+//			m_beamManagement->FindBeamPairCandidates();
+//			BeamTrackingParams afterCall = m_beamManagement->GetBeamsToTrack(); //TEST
+//			UpdateChannelMapWithBeamPair(activeBeamPairInfo);
+			m_beamManagement->FindBeamPairCandidates(); // FindBeamPairCandidates searches in the channel matrix, so update the channel matrix in first place before creating the list
 
 		}
 
+		Architecture phyArch = GetPhyArchitecture();
+//		// UpdateChannelMap calls for changing the transmit and receive beams
+//		if(phyArch == Digital)
+//		{
+//			UpdateChannelMapWithBeamPair(activeBeamPairInfo);
+//			m_beamManagement->FindBeamPairCandidates(); // FindBeamPairCandidates searches in the channel matrix, so update the channel matrix in first place before creating the list
+//		}
+//		// If analog we introduce some delay in the update
+//		else if (phyArch == Analog || phyArch == Analog_fast)
+//		{
+//			//FIXME: Not 2 times the symbol period
+//			Simulator::Schedule(analogDelayTime,&MmWaveUePhy::UpdateChannelMapWithBeamPair,this,activeBeamPairInfo);
+//			Simulator::Schedule(analogDelayTime+NanoSeconds(2),&MmWaveBeamManagement::FindBeamPairCandidates,m_beamManagement);
+//		}
+//		else
+//		{
+//			std::cout << "ERROR at MmWaveUePhy::AcquaringPeriodicCsiValuesRoutine(): Unsupported architecture" << std::endl;
+//		}
 		// FIXME: update here is disabled because it is done before at GetBeamGainsForCsi method.
 		// Not sure of the last line, GetBeamGainsForCsi only updates the SINR values of the list of beam pairs to track.
 		// I need to update the list somewhere again, I think here is the best place, before the peer has been notified about the new list around the best beam pairs
@@ -1625,7 +1626,7 @@ MmWaveUePhy::AcquaringPeriodicCsiValuesRoutine ()
 		else if (phyArch == Analog || phyArch == Analog_fast)
 		{
 			Simulator::Schedule(analogDelayTime+NanoSeconds(1.0),&MmWaveBeamManagement::NotifyBeamPairCandidatesToPeer,m_beamManagement,m_netDevice);
-			m_beamManagement->NotifyBeamPairCandidatesToPeer(m_netDevice);
+//			m_beamManagement->NotifyBeamPairCandidatesToPeer(m_netDevice);
 		}
 		else
 		{

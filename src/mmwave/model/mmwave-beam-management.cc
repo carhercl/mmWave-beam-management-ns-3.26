@@ -60,6 +60,11 @@ MmWaveBeamManagement::~MmWaveBeamManagement()
 	std::map< Ptr<NetDevice>, std::map <sinrKey,SpectrumValue>>::iterator it1;
 	for (it1 = m_enbSinrMap.begin(); it1 != m_enbSinrMap.end(); ++it1)
 	{
+//		std::map <sinrKey,SpectrumValue>::iterator it2;
+//		for (it2 = it1->second.begin(); it2 != it1->second.end(); ++it2)
+//		{
+//			it2->clear();
+//		}
 		it1->second.clear();
 	}
 	m_enbSinrMap.clear();
@@ -118,6 +123,7 @@ MmWaveBeamManagement::InitializeBeamManagerUe(Ptr<MmWavePhyMacCommon> phyMacConf
 
 	// Start SS block transmission and measurement routine
 	Time Period = GetNextSsBlockTransmissionTime(phyMacConfig,GetNumBlocksSinceLastBeamSweepUpdate()); //m_currentSsBlockSlotId
+	Period += MilliSeconds(5);	// Beam updates are to be done at the end of the 5 ms SS burst
 	Simulator::Schedule(Period,&MmWaveUePhy::StartSsBlockSlot,phy); //	StartSsBlockSlot();
 }
 
@@ -282,6 +288,13 @@ MmWaveBeamManagement::AddEnbSinr (Ptr<NetDevice> enbNetDevice, uint16_t enbBeamI
 	}
 //	std::cout << Simulator::Now().GetNanoSeconds() << " " << enbBeamId << " " << ueBeamId << " "
 //			<< Sum(sinr)/sinr.GetSpectrumModel()->GetNumBands() << std::endl;
+
+//	// erase map if memoryless beam tracking strategy.
+//	if(m_memorySs == false && m_beamReportingEnabled == true)
+//	{
+//		//ClearAllSinrMapEntries(); //memory issues: access to erased data... Schedule this call
+//		Simulator::Schedule(NanoSeconds(10),&MmWaveBeamManagement::ClearAllSinrMapEntries,this);
+//	}
 
 }
 
@@ -1079,12 +1092,12 @@ void MmWaveBeamManagement::UpdateBestScannedEnb()
 				" rx=" << bestScannedBeamPair.m_rxBeamId << " avgSinr=" << bestScannedBeamPair.m_avgSinr <<
 				" (SS)" << std::endl;
 
-	// erase map if memoryless beam tracking strategy.
-	if(m_memorySs == false && m_beamReportingEnabled == true)
-	{
-		//ClearAllSinrMapEntries(); //FIXME: memory issues: access to erased data... Schedule this call
-		Simulator::Schedule(NanoSeconds(10),&MmWaveBeamManagement::ClearAllSinrMapEntries,this);
-	}
+//	// erase map if memoryless beam tracking strategy.
+//	if(m_memorySs == false && m_beamReportingEnabled == true)
+//	{
+//		//ClearAllSinrMapEntries(); //memory issues: access to erased data... Schedule this call
+//		Simulator::Schedule(NanoSeconds(10),&MmWaveBeamManagement::ClearAllSinrMapEntries,this);
+//	}
 
 }
 
@@ -1092,10 +1105,13 @@ void MmWaveBeamManagement::UpdateBestScannedEnb()
 void
 MmWaveBeamManagement::ClearAllSinrMapEntries ()
 {
-	std::map <Ptr<NetDevice>,std::map <sinrKey,SpectrumValue>>::iterator it;
-	for (it = m_enbSinrMap.begin(); it != m_enbSinrMap.end(); ++it)
+	if (m_memorySs == false)
 	{
-		it->second.clear();
+		std::map <Ptr<NetDevice>,std::map <sinrKey,SpectrumValue>>::iterator it;
+		for (it = m_enbSinrMap.begin(); it != m_enbSinrMap.end(); ++it)
+		{
+			it->second.clear();
+		}
 	}
 }
 
@@ -1376,30 +1392,50 @@ MmWaveBeamManagement::SetCandidateBeamAlternative(uint16_t alt, uint16_t alpha, 
 	{
 		m_memorySs = true;
 		m_maxNumBeamPairCandidates = 1024;
+		m_beamReportingPeriod = 1;
 	}
 	// Check Alt 1 configuration
 	else if (alt == 1)
 	{
 		m_memorySs = false;
-		//m_maxNumBeamPairCandidates = 1024;
+		//Do not change m_maxNumBeamPairCandidates value here; it was already done;
+	}
+	else if (alt == 2)
+	{
+		m_maxNumBeamPairCandidates = 20;
 	}
 	// Check Alt 3 configuration
-	else if (alt == 3 && (alpha < 0 || alpha > 7))
+	else if (alt == 3)
 	{
-		std::cout << "Wrong alpha parameter. Using Alt.3 with alpha = 2" << std::endl;
-		m_alpha = 2;
+		m_maxNumBeamPairCandidates = 32;
+		if (alpha < 0 || alpha > 7)
+		{
+			//std::cout << "Wrong alpha parameter. Using Alt.3 with alpha = 2" << std::endl;
+			m_alpha = 2;
+		}
 	}
 	// Check Alt 4 configuration
-	else if (alt == 4 && (beta < 0 || beta > 15))
+	else if (alt == 4)
 	{
-		std::cout << "Wrong alpha parameter. Using Alt.4 with alpha = 4" << std::endl;
-		m_beta = 4;
+		m_maxNumBeamPairCandidates = 35;
+		if (beta < 0 || beta > 15)
+		{
+			//std::cout << "Wrong alpha parameter. Using Alt.4 with beta = 4" << std::endl;
+			m_beta = 4;
+		}
 	}
 	// Check Alt 5 configuration
 	else if (alt == 5)
 	{
-		m_alpha = 2;
-		m_beta = 4;
+		m_maxNumBeamPairCandidates = 56;
+		if (alpha < 0 || alpha > 7)
+		{
+			m_alpha = 2;
+		}
+		if (beta < 0 || beta > 15)
+		{
+			m_beta = 4;
+		}
 	}
 	else if (alt == 10)
 	{
@@ -1410,6 +1446,13 @@ MmWaveBeamManagement::SetCandidateBeamAlternative(uint16_t alt, uint16_t alpha, 
 		std::cout << "Unrecognized beam tracking list strategy option " << alt << ". Please check." << std::endl;
 		m_beamCandidateListStrategy = 2;
 	}
+}
+
+
+uint16_t
+MmWaveBeamManagement::GetCandidateBeamAlternative()
+{
+	return m_beamCandidateListStrategy;
 }
 
 void
@@ -1449,6 +1492,7 @@ FingerprintingDatabase::FingerprintingDatabase()
 	m_fingerprintingFilePath = "";
 	m_current_ue_index = 0;
 	m_fingerPrintingMap.clear();
+	m_fingerPrintingVector.clear();
 }
 
 FingerprintingDatabase::~FingerprintingDatabase()
@@ -1456,6 +1500,7 @@ FingerprintingDatabase::~FingerprintingDatabase()
 	m_fingerprintingFilePath = "";
 	m_current_ue_index = 0;
 	m_fingerPrintingMap.clear();
+	m_fingerPrintingVector.clear();
 }
 
 
@@ -1503,6 +1548,7 @@ FingerprintingDatabase::LoadFingerPrinting (std::string inputFilename)
 			bestBeamPairsInfo = FillBeamTrackingParamsFields(numBeamPairs,tx_beam_vector,rx_beam_vector);
 			// Add bestBeamPairsInfo to fingerprinting map.
 			m_fingerPrintingMap.insert(std::pair<coordinate_t,BeamTrackingParams>(meas_point,bestBeamPairsInfo));
+			m_fingerPrintingVector.push_back(bestBeamPairsInfo);
 			counter = 0;
 		}
 		doubleVector_t path;
@@ -1572,11 +1618,29 @@ FingerprintingDatabase::GetCurrentPathIndex ()
 	return m_current_ue_index;
 }
 
+bool
+FingerprintingDatabase::IsFpDatabaseInitialized ()
+{
+	bool flag = false;
+	if (m_fingerprintingFilePath.empty() == false || m_fingerPrintingMap.empty() == false || m_fingerPrintingVector.empty() == false)
+	{
+		flag = true;
+	}
+	return flag;
+}
+
 
 BeamTrackingParams
 FingerprintingDatabase::GetBeamTrackingPairsCurrentIndex ()
 {
 	BeamTrackingParams params;
+
+	// Fingerprinting vector:
+	params = m_fingerPrintingVector.at(m_current_ue_index);
+
+
+	// TODO: Map version cannot be based on insertion order since map order in memory and insertion order do not necessary be the same
+	/*
 	std::map <coordinate_t,BeamTrackingParams>::iterator it = m_fingerPrintingMap.begin();
 	uint16_t count = 0;
 	while (count < m_current_ue_index && it != m_fingerPrintingMap.end())
@@ -1585,9 +1649,17 @@ FingerprintingDatabase::GetBeamTrackingPairsCurrentIndex ()
 		count++;
 	}
 	params = it->second;
+	*/
+
 	return params;
 }
 
-
+BeamTrackingParams
+FingerprintingDatabase::GetBeamTrackingPairsIndex (uint16_t index)
+{
+	return m_fingerPrintingVector.at(index);
 }
 
+
+
+}
